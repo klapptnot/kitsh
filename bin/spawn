@@ -7,7 +7,7 @@ include barg.sh
 include logger.sh
 
 function get_file_hash {
-  ls -lh --time-style=full-iso "${WATCH_PATH}" 2> /dev/null | md5sum | cut -d ' ' -f 1
+  ls -lh --time-style=full-iso "${SPAWN_WATCH_PATH}" 2> /dev/null | md5sum | cut -d ' ' -f 1
 }
 
 function time_parse {
@@ -35,13 +35,19 @@ function run_on_change {
   read -r LAST_HASH < <(get_file_hash)
   log i 'Initial hash: %s' "${LAST_HASH}"
 
+  local argv=()
+  for it in "${@}"; do
+    [[ "${it}" == -* ]] && argv+=('--')
+    argv+=("${it}")
+  done
+
   while true; do
     sleep "${interval}"
     read -r CURRENT_HASH < <(get_file_hash)
 
     if [ "${CURRENT_HASH}" != "${LAST_HASH}" ]; then
       log info 'Change detected!'
-      setsid --fork spawn -r "${@}" # call this one to restart it
+      setsid --fork spawn -r "${argv[@]}" # call this one to restart it
       LAST_HASH="${CURRENT_HASH}"
     fi
   done
@@ -93,13 +99,13 @@ function main {
   r/restart :flag => SPAWN_RESTART "Restart the process if it is already running"
   c/cwd-root :flag => SPAWN_GO_FS_ROOT "Change PWD / to prevent locking CWD"
   k/keep :flag true => SPAWN_IN_BACKGROUND "Do not detach from caller terminal"
-  w/watch-file :str => WATCH_PATH "Run when file is updated, --run-at for interval"
+  w/watch-file :str => SPAWN_WATCH_PATH "Run when file is updated, --run-at for interval"
   a/run-at :str "" => SPAWN_AT_TIME "Time to wait before spawning the process"
   g/as-gnome :flag => SPAWN_AS_GNOME "Launch the process as a GNOME session"
   u/uwsm :flag => SPAWN_WITH_UWSM "Spawn process using uwsm"
   L/logger :int 4 => LOGGER_LEVEL "Logging level"
 BARG
-  if [[ -n "${WATCH_PATH}" && ! -e "${WATCH_PATH}" ]]; then
+  if [[ "${BARG_ARGV_TABLE[SPAWN_WATCH_PATH]}" == '!' && ! -e "${SPAWN_WATCH_PATH}" ]]; then
     barg::exit_msg "Directory not found" "Arg for '-d/--dir-file' must be an existing file or folder"
   fi
   barg::unload
@@ -124,7 +130,7 @@ BARG
 
   log d 'Command to run: %s' "${cmd_line}"
 
-  [ -n "${WATCH_PATH}" ] && {
+  [ -n "${SPAWN_WATCH_PATH}" ] && {
     run_on_change "${SPAWN_AT_TIME:-0.5}" "${SPAWN_EXEC_LINE[@]}"
     return
   }
