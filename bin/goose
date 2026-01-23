@@ -61,7 +61,7 @@ BARG
         printf -- '- Name: %s\n  Format: %s\n' "${names[i]}" "${presets[i]}"
       fi
     done
-    return 1
+    return
   fi
 
   {

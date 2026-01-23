@@ -67,7 +67,7 @@ function main {
     I/ignore-folders :flag => IGNORE_FOLDERS "Ignore folders when renaming"
 BARG
 
-  [[ -n "${FILES}" && -n "${FOLDER}" ]] && barg::exit_msg "Uncompatible mix" "-f/--files is not allowed with -F/--folder"
+  [[ -n "${FILES}" && -n "${FOLDER}" ]] && barg::exit_msg "Uncompatible mix" "{acc}-f{r}/{acc}--files{r} is not allowed with {acc}-F{r}/{acc}--folder{r}"
   barg::unload
 
   declare -g FORMAT="${PARAMS[*]}"

@@ -95,7 +95,7 @@ function main {
   unset COMMAND
 
   local _epilog_lines=(
-    '{acc}Examples:\x1b[0m'
+    '{acc}Examples{r}:'
     '  wayshot'
     '  wayshot region --cursor'
     '  wayshot window -t jpeg -f ~/Desktop'
