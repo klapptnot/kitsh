@@ -10,177 +10,37 @@ include url_params.sh
 include load_conf.sh
 include barg.sh
 
-# shellcheck disable=SC2034
-function main {
-  barg::parse "${@}" << BARG
-  #[always]
-  meta {
-    summary: 'Command line tool for Google Search'
-    spare_args_var: 'GOOSE_QUERY'
-    spare_args_required: true
-    help_enabled: true
-    show_defaults: true
-  }
+readonly ALLOWED_LANGS_CUZ_GOOGLE_FAILS_SILENTLY="\
+  'aa' 'ab' 'ae' 'af' 'ak' 'am' 'an' 'ar' 'as' 'av' 'ay' \
+  'az' 'ba' 'be' 'bg' 'bi' 'bm' 'bn' 'bo' 'br' 'bs' 'ca' \
+  'ce' 'ch' 'co' 'cr' 'cs' 'cu' 'cv' 'cy' 'da' 'de' 'dv' \
+  'dz' 'ee' 'el' 'en' 'eo' 'es' 'et' 'eu' 'fa' 'ff' 'fi' \
+  'fj' 'fo' 'fr' 'fy' 'ga' 'gd' 'gl' 'gn' 'gu' 'gv' 'ha' \
+  'he' 'hi' 'ho' 'hr' 'ht' 'hu' 'hy' 'hz' 'ia' 'id' 'ie' \
+  'ig' 'ii' 'ik' 'io' 'is' 'it' 'iu' 'ja' 'jv' 'ka' 'kg' \
+  'ki' 'kj' 'kk' 'kl' 'km' 'kn' 'ko' 'kr' 'ks' 'ku' 'kv' \
+  'kw' 'ky' 'la' 'lb' 'lg' 'li' 'ln' 'lo' 'lt' 'lu' 'lv' \
+  'mg' 'mh' 'mi' 'mk' 'ml' 'mn' 'mr' 'ms' 'mt' 'my' 'na' \
+  'nb' 'nd' 'ne' 'ng' 'nl' 'nn' 'no' 'nr' 'nv' 'ny' 'oc' \
+  'oj' 'om' 'or' 'os' 'pa' 'pi' 'pl' 'ps' 'pt' 'qu' 'rm' \
+  'rn' 'ro' 'ru' 'rw' 'sa' 'sc' 'sd' 'se' 'sg' 'si' 'sk' \
+  'sl' 'sm' 'sn' 'so' 'sq' 'sr' 'ss' 'st' 'su' 'sv' 'sw' \
+  'ta' 'te' 'tg' 'th' 'ti' 'tk' 'tl' 'tn' 'to' 'tr' 'ts' \
+  'tt' 'tw' 'ty' 'ug' 'uk' 'ur' 'uz' 've' 'vi' 'vo' 'wa' \
+  'wo' 'xh' 'yi' 'yo' 'za' 'zh' 'zu'"
 
-  commands {list: "Show all presets and exit"}
+function is_valid_date {
+  local date_in="${1}"
+  # check basic mm-dd-yyyy format
+  [[ ! "${date_in}" =~ ^[0-9]{2}-[0-9]{2}-[0-9]{4}$ ]] && return 1
 
-  @ t/timeout :num 5 => GOOSE_TIMEOUT "Number of seconds to wait for response"
-  @ T/tries :int 5 => GOOSE_TRIES "Number of attempts to search Google"
-  @ c/cookies :str => GOOSE_COOKIES "Cookies to send with the request"
-  @ u/user-agent :str "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0" => GOOSE_USER_AGENT "User-agent to send with the request"
-  @ a/amount :int 10 => GOOSE_RESULT_AMOUNT "Number of results to return"
-  @ s/skip :int 0 => GOOSE_RESULT_START "Number of results skipped"
-  @ p/preset :str => GOOSE_PRESET "Use preset query format"
-  @ C/command :strs => GOOSE_LAUNCH_WITH "Run command with each URL as params"
-  @ j/json :flag => GOOSE_JSON_OUTPUT "Output results in JSON format"
-    m/monochrome :flag => GOOSE_MONOCROME "Disable color output"
-  @ L/logger :int 4 => LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
-BARG
-  barg::unload
+  local month="${date_in:0:2}"
+  local day="${date_in:3:2}"
+  local year="${date_in:6:4}"
 
-  declare -A GOOSE_CONFIG
-  load_conf GOOSE_CONFIG ~/.config/_/goose.conf
-  local preset_file="${GOOSE_CONFIG[preset_file]/#~/"${HOME}"}"
-
-  if [ "${BARG_SUBCOMMAND}" == 'list' ]; then
-    if [ -z "${preset_file}" ]; then
-      log e 'No preset file defined. Add `preset_file: <path>` to ~/.config/_/goose.conf'
-      return 1
-    fi
-    if [ ! -f "${preset_file}" ]; then
-      log e 'Failed to load presets: no such file %s' "${preset_file}"
-      return 1
-    fi
-    mapfile -t names < <(grep -oP '^\w+' "${preset_file}")
-    mapfile -t presets < <(grep -oP '(?<=: ).*$' "${preset_file}")
-    for ((i = 0; i < ${#presets[@]}; i++)); do
-      if [[ -t 1 ]] && ! ${GOOSE_MONOCROME}; then
-        printf '\x1b[38;2;255;169;140m- Name: \x1b[38;2;255;232;184m%s\n' "${names[i]}"
-        printf '  \x1b[38;2;195;79;230mFormat: \x1b[38;2;189;147;249m%s\x1b[0m\n' "${presets[i]}"
-      else
-        printf -- '- Name: %s\n  Format: %s\n' "${names[i]}" "${presets[i]}"
-      fi
-    done
-    return
-  fi
-
-  {
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_TIMEOUT]}" && -n "${GOOSE_CONFIG[timeout]}" ]] \
-      && GOOSE_TIMEOUT="${GOOSE_CONFIG[timeout]}"
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_TRIES]}" && -n "${GOOSE_CONFIG[tries]}" ]] \
-      && GOOSE_TRIES="${GOOSE_CONFIG[tries]}"
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_COOKIES]}" && -n "${GOOSE_CONFIG[cookies]}" ]] \
-      && GOOSE_COOKIES="${GOOSE_CONFIG[cookies]}"
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_USER_AGENT]}" && -n "${GOOSE_CONFIG[user_agent]}" ]] \
-      && GOOSE_USER_AGENT="${GOOSE_CONFIG[user_agent]}"
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_RESULT_AMOUNT]}" && -n "${GOOSE_CONFIG[amount]}" ]] \
-      && GOOSE_RESULT_AMOUNT="${GOOSE_CONFIG[amount]}"
-    [[ -z "${BARG_ARGV_TABLE[GOOSE_RESULT_START]}" && -n "${GOOSE_CONFIG[skip]}" ]] \
-      && GOOSE_RESULT_START="${GOOSE_CONFIG[skip]}"
-  }
-
-  # shellcheck disable=SC2153
-  local query="${GOOSE_QUERY[*]}"
-
-  if ((GOOSE_RESULT_AMOUNT < 1)) || ((GOOSE_RESULT_AMOUNT > 100)); then
-    log i 'Invalid amount of results (%s), defaulting to 10' "${GOOSE_RESULT_AMOUNT}"
-    GOOSE_RESULT_AMOUNT=10
-  fi
-
-  if [ -n "${GOOSE_PRESET}" ]; then
-    if [ -z "${preset_file}" ]; then
-      log e 'No preset file defined. Add `preset_file: <path>` to ~/.config/_/goose.conf'
-      return 1
-    fi
-    if [ ! -f "${preset_file}" ]; then
-      log e 'Failed to load presets: no such file %s' "${preset_file}"
-      return 1
-    fi
-    local preset_format='{{QUERY}}'
-    if ! preset_format=$(grep -oP "(?<=${GOOSE_PRESET}: ).*" "${preset_file}"); then
-      log e 'Failed to get query from preset: no such preset "%s"' "${GOOSE_PRESET}"
-      return 1
-    fi
-    query="${preset_format//\{\{QUERY\}\}/${query}}"
-  fi
-
-  declare -A grequest=()
-  grequest['query']="${query}"
-  grequest['tries']="${GOOSE_TRIES}"
-  grequest['cookies']="${GOOSE_COOKIES}"
-  grequest['timeout']="${GOOSE_TIMEOUT}"
-  grequest['user_agent']="${GOOSE_USER_AGENT}"
-
-  # google params
-  grequest['g_num']="${GOOSE_RESULT_AMOUNT}"
-  grequest['g_start']="${GOOSE_RESULT_START}"
-
-  if ! google_search grequest; then
-    log e 'Failed to search google'
-    return 1
-  fi
-
-  if ((GOOGLE_RESULTS == 0)); then
-    log i 'There are no results (have you provided valid cookies?)'
-    return 1
-  fi
-
-  if ((${#GOOSE_LAUNCH_WITH[@]} > 0)); then
-    if ! command -v "${GOOSE_LAUNCH_WITH[0]}" &> /dev/null; then
-      log e 'Command %s not found or not executable' "${GOOSE_LAUNCH_WITH[0]}"
-      return 1
-    fi
-
-    placeholder_index=-1
-    for i in "${!GOOSE_LAUNCH_WITH[@]}"; do
-      if [[ "${GOOSE_LAUNCH_WITH[i]}" == '{}' ]]; then
-        placeholder_index="${i}"
-        break
-      fi
-    done
-
-    # index -1 and also index 0 is the command
-    if ((placeholder_index < 1)); then
-      log i "Launching command..."
-      exec "${GOOSE_LAUNCH_WITH[@]}" "${GOOGLE_RESULT_LINKS[@]}"
-    fi
-
-    log i "Launching commands..."
-    for link in "${GOOGLE_RESULT_LINKS[@]}"; do
-      cmd=("${GOOSE_LAUNCH_WITH[@]}")
-      cmd[placeholder_index]="${link}"
-      log i 'Running: %s' "${cmd[*]}"
-      "${cmd[@]}" > /dev/null &
-    done
-
-    return
-  fi
-
-  if ${GOOSE_JSON_OUTPUT}; then
-    local buf=()
-    for ((i = 0; i < GOOGLE_RESULTS; i++)); do
-      read -r escaped_title < <(str_escape <<< "${GOOGLE_RESULT_TITLES[i]}")
-      buf+=("{\"desc\":\"${escaped_title}\",\"url\":\"${GOOGLE_RESULT_LINKS[i]}\"}")
-    done
-    local json=""
-    IFS=, json="${buf[*]}"
-    printf "[%s]\n" "${json}"
-    return 0
-  fi
-
-  for ((i = 0; i < GOOGLE_RESULTS; i++)); do
-    local title="${GOOGLE_RESULT_TITLES[i]}"
-    [ -n "${title//[!:]/}" ] && title="\"${title//\"/\\\"}\""
-    if [[ -t 1 ]] && ! ${GOOSE_MONOCROME}; then
-      printf '\x1b[38;2;255;169;140m- desc: \x1b[38;2;255;232;184m%s\n' "${title}"
-      printf '  \x1b[38;2;195;79;230murl: \x1b[38;2;189;147;249m%s\x1b[0m\n' "${GOOGLE_RESULT_LINKS[i]}"
-    else
-      printf -- '- desc: %s\n  url: %s\n' "${title}" "${GOOGLE_RESULT_LINKS[i]}"
-    fi
-  done
+  date -d "${year}-${month}-${day}" > /dev/null 2>&1
 }
 
-# shellcheck disable=SC2034
 function google_search {
   declare -n request="${1}"
 
@@ -199,10 +59,13 @@ function google_search {
   google_url_params['q']="${request[query]}"          # Search Query
   google_url_params['num']="${request[g_num]:-10}"    # Amount of results
   google_url_params['start']="${request[g_start]:-0}" # Start from the N result
-  google_url_params['dpf']="${request[g_dpf]:-1}"     # Results page number
+  # google_url_params['dpf']="${request[g_dpf]:-1}"     # Results page number
+  # lr == Language Restrict
+  [ -n "${request['language']}" ] && google_url_params['lr']="lang_${request[language]}"
+  [ -n "${request['date_range']}" ] && google_url_params['tbs']="${request[date_range]}"
 
   read -r google_req_url < <(url_params google_url_params)
-  google_req_url="https://www.google.com/search?${google_req_url:?}"
+  google_req_url="https://www.google.com/search?${google_req_url:?Failed to encode URL}"
 
   local __attempts=0
   local http_codes=()
@@ -284,14 +147,227 @@ function google_search {
   log d 'Record of HTTP codes [%s]' "${http_codes[*]}"
   ${in_error} && return 1
 
-  mapfile -t GOOGLE_RESULT_TITLES < <(grep -oP '(?<=<br><h3 class="LC20lb MBeuO DKV0Md" id=")[^<]*(?=<)' <<< "${response_body}" | sed 's/^.\{29\}//' | xml_unescape)
-  mapfile -t GOOGLE_RESULT_LINKS < <(grep -oP '(?<=><a jsname="UWckNb" href=")[^ ]*(?=")' <<< "${response_body}")
+  mapfile -t GOOGLE_RESULT_TITLE < <(grep -oP '(?<=<br><h3 class="LC20lb MBeuO DKV0Md" id=")[^<]*(?=<)' <<< "${response_body}" | sed 's/^.\{29\}//' | xml_unescape)
+  mapfile -t GOOGLE_RESULT_URLS < <(grep -oP '(?<=><a jsname="UWckNb" href=")[^ ]*(?=")' <<< "${response_body}")
+  mapfile -t GOOGLE_RESULT_DESC < <(grep -oP '(?<=<div class="VwiC3b yXK7lf p4wth r025kc Hdw6tb" style="-webkit-line-clamp:2"><span.).*?(?=</span></div>)' <<< "${response_body}")
 
-  declare -g GOOGLE_RESULTS=${#GOOGLE_RESULT_LINKS[@]}
-  declare -g GOOGLE_RESULT_TITLES
-  declare -g GOOGLE_RESULT_LINKS
+  declare -g GOOGLE_RESULTS=${#GOOGLE_RESULT_URLS[@]}
+  declare -g GOOGLE_RESULT_TITLE
+  declare -g GOOGLE_RESULT_URLS
+  declare -g GOOGLE_RESULT_DESC
+  declare -g GOOGLE_RESULT_DATE
+
+  readonly dregex='<span>([0-9]{1,2}\s[a-z]+\s[0-9]{4})</span>\s—\s</span><span>'
+
+  for ((i = 0; i < GOOGLE_RESULTS; i++)); do
+    local desc="${GOOGLE_RESULT_DESC[i]//<em>/}"
+    desc="${desc//<\/em>/}"
+
+    if [[ "${desc}" == 'class="YrbPuc">'* ]]; then
+      desc="${desc#class=\"YrbPuc\">}"
+      [[ "${desc}" =~ ${dregex} ]] || continue
+
+      GOOGLE_RESULT_DESC[i]="${desc#"${BASH_REMATCH[0]}"}"
+      GOOGLE_RESULT_DATE[i]="${BASH_REMATCH[1]}"
+    else
+      GOOGLE_RESULT_DESC[i]="${desc:-null}"
+      GOOGLE_RESULT_DATE[i]="null"
+    fi
+  done
 
   return 0
+}
+
+function main {
+  barg::parse "${@}" << BARG
+  #[always]
+  meta {
+    summary: 'Command line tool for Google Search'
+    spare_args_var: 'GOOSE_QUERY'
+    spare_args_required: true
+    help_enabled: true
+    show_defaults: true
+  }
+
+  commands {list: "Show all presets and exit"}
+
+  @ t/timeout :num 5 => GOOSE_TIMEOUT "Number of seconds to wait for response"
+  @ T/tries :int 5 => GOOSE_TRIES "Number of attempts to search Google"
+  @ c/cookies :str => GOOSE_COOKIES "Cookies to send with the request"
+  @ u/user-agent :str "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0" => GOOSE_USER_AGENT "User-agent to send with the request"
+  @ a/amount :int 10 => GOOSE_RESULT_AMOUNT "Number of results to return"
+  @ l/language [${ALLOWED_LANGS_CUZ_GOOGLE_FAILS_SILENTLY}] => GOOSE_LANGUAGE_RESTRICT "Restrict results to a selected language"
+  @ d/date-range :str => GOOSE_DATE_RANGE "Date range as <start>:<end> of mm-dd-yyyy"
+  @ s/skip :int 0 => GOOSE_RESULT_START "Number of results skipped"
+  @ p/preset :str => GOOSE_PRESET "Use preset query format"
+  @ C/command :strs => GOOSE_LAUNCH_WITH "Run command with each URL as params"
+  @ j/json :flag => GOOSE_JSON_OUTPUT "Output results in JSON format"
+    m/monochrome :flag => GOOSE_MONOCROME "Disable color output"
+  @ L/logger :int 4 => LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
+BARG
+  barg::unload
+
+  declare -A GOOSE_CONFIG
+  load_conf GOOSE_CONFIG ~/.config/_/goose.conf
+  local preset_file="${GOOSE_CONFIG[preset_file]/#~/"${HOME}"}"
+
+  if [[ -n "${GOOSE_PRESET}" || "${BARG_SUBCOMMAND}" == 'list' ]]; then
+    if [ -z "${preset_file}" ]; then
+      log e 'No preset file defined. Add `preset_file: <path>` to ~/.config/_/goose.conf'
+      return 1
+    fi
+    if [ ! -f "${preset_file}" ]; then
+      log e 'Failed to load presets: no such file %s' "${preset_file}"
+      return 1
+    fi
+  fi
+
+  if [ "${BARG_SUBCOMMAND}" == 'list' ]; then
+    mapfile -t names < <(grep -oP '^\w+' "${preset_file}")
+    mapfile -t presets < <(grep -oP '(?<=: ).*$' "${preset_file}")
+    for ((i = 0; i < ${#presets[@]}; i++)); do
+      if [[ -t 1 ]] && ! ${GOOSE_MONOCROME}; then
+        printf '\x1b[38;2;255;169;140m- Name: \x1b[38;2;255;232;184m%s\n' "${names[i]}"
+        printf '  \x1b[38;2;195;79;230mFormat: \x1b[38;2;189;147;249m%s\x1b[0m\n' "${presets[i]}"
+      else
+        printf -- '- Name: %s\n  Format: %s\n' "${names[i]}" "${presets[i]}"
+      fi
+    done
+    return
+  fi
+
+  {
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_TIMEOUT]}" && -n "${GOOSE_CONFIG[timeout]}" ]] \
+      && GOOSE_TIMEOUT="${GOOSE_CONFIG[timeout]}"
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_TRIES]}" && -n "${GOOSE_CONFIG[tries]}" ]] \
+      && GOOSE_TRIES="${GOOSE_CONFIG[tries]}"
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_COOKIES]}" && -n "${GOOSE_CONFIG[cookies]}" ]] \
+      && GOOSE_COOKIES="${GOOSE_CONFIG[cookies]}"
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_USER_AGENT]}" && -n "${GOOSE_CONFIG[user_agent]}" ]] \
+      && GOOSE_USER_AGENT="${GOOSE_CONFIG[user_agent]}"
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_RESULT_AMOUNT]}" && -n "${GOOSE_CONFIG[amount]}" ]] \
+      && GOOSE_RESULT_AMOUNT="${GOOSE_CONFIG[amount]}"
+    [[ -z "${BARG_ARGV_TABLE[GOOSE_RESULT_START]}" && -n "${GOOSE_CONFIG[skip]}" ]] \
+      && GOOSE_RESULT_START="${GOOSE_CONFIG[skip]}"
+  }
+
+  # shellcheck disable=SC2153
+  local query="${GOOSE_QUERY[*]}"
+
+  if ((GOOSE_RESULT_AMOUNT < 1)) || ((GOOSE_RESULT_AMOUNT > 10)); then
+    log i 'Invalid amount of results (%s), defaulting to 10' "${GOOSE_RESULT_AMOUNT}"
+    GOOSE_RESULT_AMOUNT=10
+  fi
+
+  if [ -n "${GOOSE_PRESET}" ]; then
+    local preset_format='{{QUERY}}'
+    if ! preset_format=$(grep -oP "(?<=${GOOSE_PRESET}: ).*" "${preset_file}"); then
+      log e 'Failed to get query from preset: no such preset "%s"' "${GOOSE_PRESET}"
+      return 1
+    fi
+    query="${preset_format//\{\{QUERY\}\}/${query}}"
+  fi
+
+  declare -A grequest=()
+
+  if [ -n "${GOOSE_DATE_RANGE}" ]; then
+    IFS=: read -ra date_range <<< "${GOOSE_DATE_RANGE}"
+
+    local range_name=("start" "end")
+    for i in {0..1}; do
+      [ -n "${date_range[i]}" ] && {
+        if ! is_valid_date "${date_range[i]}"; then
+          log e 'Invalid %s date format: %s. Use dd-mm-yyyy.' "${range_name[i]}" "${date_range[i]}"
+          return 1
+        fi
+
+        date_range[i]="${date_range[i]//-/\/}"
+      }
+    done
+
+    grequest['date_range']="cdr:1,cd_min:${date_range[0]},cd_max:${date_range[1]}"
+  fi
+
+  grequest['query']="${query}"
+  grequest['tries']="${GOOSE_TRIES}"
+  grequest['cookies']="${GOOSE_COOKIES}"
+  grequest['timeout']="${GOOSE_TIMEOUT}"
+  grequest['user_agent']="${GOOSE_USER_AGENT}"
+  grequest['language']="${GOOSE_LANGUAGE_RESTRICT}"
+
+  # google params
+  grequest['g_num']="${GOOSE_RESULT_AMOUNT}"
+  grequest['g_start']="${GOOSE_RESULT_START}"
+
+  if ! google_search grequest; then
+    log e 'Failed to search google T-T'
+    return 1
+  fi
+
+  if ((GOOGLE_RESULTS == 0)); then
+    log i 'There are no results T-T'
+    return 1
+  fi
+
+  if ((${#GOOSE_LAUNCH_WITH[@]} > 0)); then
+    if ! command -v "${GOOSE_LAUNCH_WITH[0]}" &> /dev/null; then
+      log e 'Command %s not found or not executable' "${GOOSE_LAUNCH_WITH[0]}"
+      return 1
+    fi
+
+    placeholder_index=-1
+    for i in "${!GOOSE_LAUNCH_WITH[@]}"; do
+      if [[ "${GOOSE_LAUNCH_WITH[i]}" == '{}' ]]; then
+        placeholder_index="${i}"
+        break
+      fi
+    done
+
+    # index -1 and also index 0 is the command
+    if ((placeholder_index < 1)); then
+      log i "Launching command..."
+      exec "${GOOSE_LAUNCH_WITH[@]}" "${GOOGLE_RESULT_URLS[@]}"
+    fi
+
+    log i "Launching commands..."
+    for link in "${GOOGLE_RESULT_URLS[@]}"; do
+      cmd=("${GOOSE_LAUNCH_WITH[@]}")
+      cmd[placeholder_index]="${link}"
+      log i 'Running: %s' "${cmd[*]}"
+      "${cmd[@]}" > /dev/null &
+    done
+
+    return
+  fi
+
+  if ${GOOSE_JSON_OUTPUT}; then
+    local buf=()
+    for ((i = 0; i < GOOGLE_RESULTS; i++)); do
+      read -r escaped_title < <(str_escape <<< "${GOOGLE_RESULT_TITLE[i]}")
+      read -r escaped_desc < <(str_escape <<< "${GOOGLE_RESULT_DESC[i]}")
+      read -r escaped_date < <(str_escape <<< "${GOOGLE_RESULT_DATE[i]}")
+      buf+=("{\"name\":\"${escaped_title}\",\"url\":\"${GOOGLE_RESULT_URLS[i]}\",\"desc\":\"${escaped_desc}\",\"date\":\"${escaped_date}\"}")
+    done
+    local json=""
+    IFS=, json="${buf[*]}"
+    printf "[%s]\n" "${json}"
+    return 0
+  fi
+
+  for ((i = 0; i < GOOGLE_RESULTS; i++)); do
+    local title="${GOOGLE_RESULT_TITLE[i]}"
+    local desc="${GOOGLE_RESULT_DESC[i]}"
+    [ -n "${title//[!:]/}" ] && title="\"${title//\"/\\\"}\""
+    [ -n "${desc//[!:]/}" ] && desc="\"${desc//\"/\\\"}\""
+    if [[ -t 1 ]] && ! ${GOOSE_MONOCROME}; then
+      printf '\x1b[38;2;255;169;140m- name: \x1b[38;2;255;232;184m%s\n' "${title}"
+      printf '  \x1b[38;2;195;79;230murl: \x1b[38;2;189;147;249m%s\x1b[0m\n' "${GOOGLE_RESULT_URLS[i]}"
+      printf '  \x1b[38;2;142;192;124mdesc: \x1b[38;2;166;227;161m%s\x1b[0m\n' "${desc}"
+      printf '  \x1b[38;2;243;139;168mdate: \x1b[38;2;249;226;175m%s\x1b[0m\n' "${GOOGLE_RESULT_DATE[i]}"
+    else
+      printf -- '- desc: %s\n  url: %s\n  desc: %s\n  date: %s\n' "${title}" "${GOOGLE_RESULT_URLS[i]}" "${desc}" "${GOOGLE_RESULT_DATE[i]}"
+    fi
+  done
 }
 
 main "${@}"

@@ -24,10 +24,10 @@ function url_params {
   local all=()
   for k in "${!param_map[@]}"; do
     read -r encoded_val < <(pct_encode <<< "${param_map[${k}]}")
-    printf -v item '%s=%s' "${k}" "${encoded_val}"
-    all+=("${item}")
+    all+=("${k}=${encoded_val}")
   done
-  local result="${all[*]}"
+  local result
+  IFS='&' result="${all[*]}"
 
-  printf "%s" "${result//\ /\&}"
+  printf '%s' "${result}"
 }
