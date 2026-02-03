@@ -10,24 +10,53 @@ include url_params.sh
 include load_conf.sh
 include barg.sh
 
-readonly ALLOWED_LANGS_CUZ_GOOGLE_FAILS_SILENTLY="\
-  'aa' 'ab' 'ae' 'af' 'ak' 'am' 'an' 'ar' 'as' 'av' 'ay' \
-  'az' 'ba' 'be' 'bg' 'bi' 'bm' 'bn' 'bo' 'br' 'bs' 'ca' \
-  'ce' 'ch' 'co' 'cr' 'cs' 'cu' 'cv' 'cy' 'da' 'de' 'dv' \
-  'dz' 'ee' 'el' 'en' 'eo' 'es' 'et' 'eu' 'fa' 'ff' 'fi' \
-  'fj' 'fo' 'fr' 'fy' 'ga' 'gd' 'gl' 'gn' 'gu' 'gv' 'ha' \
-  'he' 'hi' 'ho' 'hr' 'ht' 'hu' 'hy' 'hz' 'ia' 'id' 'ie' \
-  'ig' 'ii' 'ik' 'io' 'is' 'it' 'iu' 'ja' 'jv' 'ka' 'kg' \
-  'ki' 'kj' 'kk' 'kl' 'km' 'kn' 'ko' 'kr' 'ks' 'ku' 'kv' \
-  'kw' 'ky' 'la' 'lb' 'lg' 'li' 'ln' 'lo' 'lt' 'lu' 'lv' \
-  'mg' 'mh' 'mi' 'mk' 'ml' 'mn' 'mr' 'ms' 'mt' 'my' 'na' \
-  'nb' 'nd' 'ne' 'ng' 'nl' 'nn' 'no' 'nr' 'nv' 'ny' 'oc' \
-  'oj' 'om' 'or' 'os' 'pa' 'pi' 'pl' 'ps' 'pt' 'qu' 'rm' \
-  'rn' 'ro' 'ru' 'rw' 'sa' 'sc' 'sd' 'se' 'sg' 'si' 'sk' \
-  'sl' 'sm' 'sn' 'so' 'sq' 'sr' 'ss' 'st' 'su' 'sv' 'sw' \
-  'ta' 'te' 'tg' 'th' 'ti' 'tk' 'tl' 'tn' 'to' 'tr' 'ts' \
-  'tt' 'tw' 'ty' 'ug' 'uk' 'ur' 'uz' 've' 'vi' 'vo' 'wa' \
-  'wo' 'xh' 'yi' 'yo' 'za' 'zh' 'zu'"
+readonly BARG_SET_LABELS_GOOSE_LANGUAGE_RESTRICT=(
+  'Afar' 'Abkhazian' 'Avestan' 'Afrikaans' 'Akan' 'Amharic' 'Aragonese'
+  'Arabic' 'Assamese' 'Avaric' 'Aymara' 'Azerbaijani' 'Bashkir'
+  'Belarusian' 'Bulgarian' 'Bislama' 'Bambara' 'Bengali' 'Tibetan'
+  'Breton' 'Bosnian' 'Catalan' 'Chechen' 'Chamorro' 'Corsican' 'Cree'
+  'Czech' 'Church Slavic' 'Chuvash' 'Welsh' 'Danish' 'German'
+  'Divehi' 'Dzongkha' 'Ewe' 'Greek' 'English' 'Esperanto' 'Spanish'
+  'Estonian' 'Basque' 'Persian' 'Fulah' 'Finnish' 'Fijian' 'Faroese'
+  'French' 'Western Frisian' 'Irish' 'Scottish Gaelic' 'Galician'
+  'Guarani' 'Gujarati' 'Manx' 'Hausa' 'Hebrew' 'Hindi' 'Hiri Motu'
+  'Croatian' 'Haitian Creole' 'Hungarian' 'Armenian' 'Herero'
+  'Interlingua' 'Indonesian' 'Interlingue' 'Igbo' 'Sichuan Yi'
+  'Inupiaq' 'Ido' 'Icelandic' 'Italian' 'Inuktitut' 'Japanese'
+  'Javanese' 'Georgian' 'Kongo' 'Kikuyu' 'Kuanyama' 'Kazakh'
+  'Kalaallisut' 'Central Khmer' 'Kannada' 'Korean' 'Kanuri'
+  'Kashmiri' 'Kurdish' 'Komi' 'Cornish' 'Kyrgyz' 'Latin'
+  'Luxembourgish' 'Ganda' 'Limburgish' 'Lingala' 'Lao'
+  'Lithuanian' 'Luba-Katanga' 'Latvian' 'Malagasy' 'Marshallese'
+  'Maori' 'Macedonian' 'Malayalam' 'Mongolian' 'Marathi'
+  'Malay' 'Maltese' 'Burmese' 'Nauru' 'Norwegian Bokmal'
+  'North Ndebele' 'Nepali' 'Ndonga' 'Dutch' 'Norwegian Nynorsk'
+  'Norwegian' 'South Ndebele' 'Navajo' 'Chichewa' 'Occitan'
+  'Ojibwa' 'Oromo' 'Oriya' 'Ossetian' 'Punjabi' 'Pali'
+  'Polish' 'Pashto' 'Portuguese' 'Quechua' 'Romansh'
+  'Rundi' 'Romanian' 'Russian' 'Kinyarwanda' 'Sanskrit'
+  'Sardinian' 'Sindhi' 'Northern Sami' 'Sango' 'Sinhala'
+  'Slovak' 'Slovenian' 'Samoan' 'Shona' 'Somali'
+  'Albanian' 'Serbian' 'Swati' 'Southern Sotho' 'Sundanese'
+  'Swedish' 'Swahili' 'Tamil' 'Telugu' 'Tajik'
+  'Thai' 'Tigrinya' 'Turkmen' 'Tagalog' 'Tswana'
+  'Tonga' 'Turkish' 'Tsonga' 'Tatar' 'Twi'
+  'Tahitian' 'Uyghur' 'Ukrainian' 'Urdu' 'Uzbek'
+  'Venda' 'Vietnamese' 'Volapuk' 'Walloon' 'Wolof'
+  'Xhosa' 'Yiddish' 'Yoruba' 'Zhuang' 'Chinese' 'Zulu'
+)
+
+readonly ISO_LANG_CODES=(
+  aa ab ae af ak am an ar as av ay az ba be bg bi bm bn bo br bs ca
+  ce ch co cr cs cu cv cy da de dv dz ee el en eo es et eu fa ff fi
+  fj fo fr fy ga gd gl gn gu gv ha he hi ho hr ht hu hy hz ia id ie
+  ig ii ik io is it iu ja jv ka kg ki kj kk kl km kn ko kr ks ku kv
+  kw ky la lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms mt my na
+  nb nd ne ng nl nn no nr nv ny oc oj om or os pa pi pl ps pt qu rm
+  rn ro ru rw sa sc sd se sg si sk sl sm sn so sq sr ss st su sv sw
+  ta te tg th ti tk tl tn to tr ts tt tw ty ug uk ur uz ve vi vo wa
+  wo xh yi yo za zh zu
+)
 
 function is_valid_date {
   local date_in="${1}"
@@ -196,7 +225,7 @@ function main {
   @ c/cookies :str => GOOSE_COOKIES "Cookies to send with the request"
   @ u/user-agent :str "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0" => GOOSE_USER_AGENT "User-agent to send with the request"
   @ a/amount :int 10 => GOOSE_RESULT_AMOUNT "Number of results to return"
-  @ l/language [${ALLOWED_LANGS_CUZ_GOOGLE_FAILS_SILENTLY}] => GOOSE_LANGUAGE_RESTRICT "Restrict results to a selected language"
+  @ l/language [${ISO_LANG_CODES[*]@Q}] => GOOSE_LANGUAGE_RESTRICT "Restrict results to a selected language"
   @ d/date-range :str => GOOSE_DATE_RANGE "Date range as <start>:<end> of mm-dd-yyyy"
   @ s/skip :int 0 => GOOSE_RESULT_START "Number of results skipped"
   @ p/preset :str => GOOSE_PRESET "Use preset query format"
