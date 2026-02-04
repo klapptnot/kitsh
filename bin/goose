@@ -176,9 +176,9 @@ function google_search {
   log d 'Record of HTTP codes [%s]' "${http_codes[*]}"
   ${in_error} && return 1
 
-  mapfile -t GOOGLE_RESULT_TITLE < <(grep -oP '(?<=<br><h3 class="LC20lb MBeuO DKV0Md" id=")[^<]*(?=<)' <<< "${response_body}" | sed 's/^.\{29\}//' | xml_unescape)
-  mapfile -t GOOGLE_RESULT_URLS < <(grep -oP '(?<=><a jsname="UWckNb" href=")[^ ]*(?=")' <<< "${response_body}")
-  mapfile -t GOOGLE_RESULT_DESC < <(grep -oP '(?<=<div class="VwiC3b yXK7lf p4wth r025kc Hdw6tb" style="-webkit-line-clamp:2"><span.).*?(?=</span></div>)' <<< "${response_body}")
+  mapfile -t GOOGLE_RESULT_TITLE < <(grep -oP '(?<=<h3 class="LC20lb MBeuO DKV0Md" id=")[^<]*(?=<)' <<< "${response_body}" | sed 's/^.\{29\}//' | xml_unescape)
+  mapfile -t GOOGLE_RESULT_URLS < <(grep -oP '(?<=><a jsname="UWckNb" class="zReHs" href=")[^ ]*(?=")' <<< "${response_body}")
+  mapfile -t GOOGLE_RESULT_DESC < <(grep -oP '(?<=<div class="VwiC3b yXK7lf p4wth r025kc Hdw6tb" style="-webkit-line-clamp:2"><span.).*?(</span>)?(?=</div>)' <<< "${response_body}")
 
   declare -g GOOGLE_RESULTS=${#GOOGLE_RESULT_URLS[@]}
   declare -g GOOGLE_RESULT_TITLE
@@ -186,7 +186,7 @@ function google_search {
   declare -g GOOGLE_RESULT_DESC
   declare -g GOOGLE_RESULT_DATE
 
-  readonly dregex='<span>([0-9]{1,2}\s[a-z]+\s[0-9]{4})</span>\s—\s</span><span>'
+  readonly dregex='<span>([0-9]{1,2}\s[a-z]+\s[0-9]{4})</span>\s—\s</span>'
 
   for ((i = 0; i < GOOGLE_RESULTS; i++)); do
     local desc="${GOOGLE_RESULT_DESC[i]//<em>/}"
@@ -202,6 +202,7 @@ function google_search {
       GOOGLE_RESULT_DESC[i]="${desc:-null}"
       GOOGLE_RESULT_DATE[i]="null"
     fi
+    GOOGLE_RESULT_DESC[i]="${GOOGLE_RESULT_DESC[i]%</span>}"
   done
 
   return 0
