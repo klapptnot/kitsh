@@ -103,12 +103,14 @@ function main {
   a/run-at :str "" => SPAWN_AT_TIME "Time to wait before spawning the process"
   g/as-gnome :flag => SPAWN_AS_GNOME "Launch the process as a GNOME session"
   u/uwsm :flag => SPAWN_WITH_UWSM "Spawn process using uwsm"
-  L/logger :int 4 => LOGGER_LEVEL "Logging level"
+  L/logger :int => SPAWN_LOGGER_LEVEL "Logging level"
 BARG
-  if [[ "${BARG_ARGV_TABLE[SPAWN_WATCH_PATH]}" == '!' && ! -e "${SPAWN_WATCH_PATH}" ]]; then
+  if [[ -n "${BARG_ARGV_TABLE[SPAWN_WATCH_PATH]}" && ! -e "${SPAWN_WATCH_PATH}" ]]; then
     barg::exit_msg "Directory not found" "Arg for '-d/--dir-file' must be an existing file or folder"
   fi
   barg::unload
+
+  log::setup "${SPAWN_LOGGER_LEVEL}"
 
   if ${SPAWN_WITH_UWSM} && ! command -v uwsm &> /dev/null; then
     log e 'The command uwsm is not an executable'

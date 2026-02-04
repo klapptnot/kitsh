@@ -6,7 +6,6 @@
 # Pure-FTPd Server Wrapper for Termux
 # Configured for virtual users with full permissions
 
-LOGGER_LEVEL="${LOGGER_LEVEL:-4}"
 include load_conf.sh
 include logger.sh
 

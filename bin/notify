@@ -314,7 +314,6 @@ function show_help {
 }
 
 function main {
-  readonly LOGGER_LEVEL="${LOGGER_LEVEL:-4}"
   barg::parse "${@}" << EOF
   meta {
     argv_zero: 'notify'

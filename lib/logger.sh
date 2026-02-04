@@ -28,25 +28,33 @@ declare -grA LOGGER_LEVEL_NUMS=(
   ['d']=5
 )
 
+# Normalize log level from env once at load time.
+# Accepts: 0-5, o/c/e/w/i/d, or off/crit/error/warn/info/debug
+# Precedence: LOGGER_LEVEL > LOG_LEVEL > default (info)
+function log::setup {
+  local raw="${1:-${LOGGER_LEVEL:-${LOG_LEVEL:-i}}}"
+  raw="${raw,,}"
+
+  if [[ "${raw}" =~ ^[0-5]$ ]]; then
+    LOGGER_EFFECTIVE_LEVEL="${raw}"
+  elif [[ -n "${raw}" && -n "${LOGGER_LEVEL_NUMS[${raw:0:1}]}" ]]; then
+    LOGGER_EFFECTIVE_LEVEL="${LOGGER_LEVEL_NUMS[${raw:0:1}]}"
+  fi
+
+  declare -gri LOGGER_EFFECTIVE_LEVEL="${LOGGER_EFFECTIVE_LEVEL:-4}"
+}
+
 # Print (or not) to output info based on the LOGGER_LEVEL env var
-# LOGGER_LEVEL is set to `i` by default
+# LOGGER_LEVEL is `i` by default
 # Usage:
 #   log <level> <fmt> [args...]
-# Example:
-#   $ some_fun_or_script() {
-#   >   log d 'Given %d params' ${#}
-#   >  }
-#   $
-#   $ some_fun_or_script a b c d # does not print
-#   $ LOGGER_LEVEL=d some_fun_or_script a b c d # prints the info
-#   Given 4 params
 function log {
   [[ -z "${1}" ]] && return
+  [[ -z "${LOGGER_EFFECTIVE_LEVEL+x}" ]] && log::setup
 
   : "${1:0:1}"
   local -ri level="${LOGGER_LEVEL_NUMS[${_,,}]:-0}"
-  local -ri log_level="${LOGGER_LEVEL:-0}"
-  ((0 == log_level || level > log_level)) && return
+  ((0 == LOGGER_EFFECTIVE_LEVEL || level > LOGGER_EFFECTIVE_LEVEL)) && return
 
   # shellcheck disable=SC2059
   printf -v message "${2}" "${@:3}"

@@ -81,9 +81,6 @@ function record_timestamps {
 }
 
 function main {
-  # shellcheck disable=SC2034
-  LOGGER_LEVEL=4
-
   barg::parse "${@}" << 'BARG'
   #[always]
   meta {

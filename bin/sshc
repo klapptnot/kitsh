@@ -5,7 +5,6 @@
 
 # SSH daemon management with wake lock and config support
 
-LOGGER_LEVEL="${LOGGER_LEVEL:-4}"
 include logger.sh
 include load_conf.sh
 

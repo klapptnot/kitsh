@@ -232,9 +232,10 @@ function main {
   @ C/command :strs => GOOSE_LAUNCH_WITH "Run command with each URL as params"
   @ j/json :flag => GOOSE_JSON_OUTPUT "Output results in JSON format"
     m/monochrome :flag => GOOSE_MONOCROME "Disable color output"
-  @ L/logger :int 4 => LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
+  @ L/logger :int => GOOSE_LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
 BARG
   barg::unload
+  log::setup "${GOOSE_LOGGER_LEVEL}"
 
   declare -A GOOSE_CONFIG
   load_conf GOOSE_CONFIG ~/.config/_/goose.conf
