@@ -151,9 +151,9 @@ function main {
 
   a/audio :str => WFRECORD_ENABLE_AUDIO "Include audio from that source, @ to detect source"
   r/framerate :int 30 => WFRECORD_FRAMERATE "Recording framerate"
-  c/codec ["libx264" "libx265" "av1"] => WFRECORD_CODEC "Video codec: libx264, libx265, av1"
+  c/codec ["libx264" "libx265" "av1"] "libx264" => WFRECORD_CODEC "Video codec: libx264, libx265, av1"
   q/quality :str => WFRECORD_QUALITY "Video quality/bitrate"
-  t/container ["mp4" "mkv" "webm"] => WFRECORD_CONTAINER "Container format: mp4, mkv, webm"
+  t/container ["mp4" "mkv" "webm"] "mp4" => WFRECORD_CONTAINER "Container format: mp4, mkv, webm"
   f/folder :str "${USER_VIDS_DIR}/Recordings" => WFRECORD_FOLDER "Output folder"
   n/filename :str "recording_%Y-%m-%d-%H-%M-%S" => WFRECORD_FILENAME_FORMAT "Filename format"
 

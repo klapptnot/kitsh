@@ -19,7 +19,7 @@ function wayshot::indicate_take {
 }
 
 function wayshot::take_capture {
-  grim -t png "${@:2}" - 2> /dev/null > "${1}" || {
+  grim "${@:2}" "${1}" 2> /dev/null || {
     wayshot::exit_msg 'Unable to take a screen capture'
   }
 
@@ -124,7 +124,7 @@ function main {
   c/cursor :flag => WAYSHOT_ENABLE_CURSOR "Include cursor in screenshot"
   b/no-clipboard :flag => WAYSHOT_NOCLIPBOARD 'Do not copy to clipboard'
   u/upscale :flag => WAYSHOT_UPSCALE "Upscale by 200% (requires image magick CLI)"
-  t/filetype ["png" "ppm" "jpeg"] => WAYSHOT_FILETYPE "File format: png, ppm, jpeg"
+  t/filetype ["png" "ppm" "jpeg"] "png" => WAYSHOT_FILETYPE "File format: png, ppm, jpeg"
   f/folder :str "${USER_PICS_DIR}/Screenshots" => WAYSHOT_FOLDER "Output folder"
   n/filename :str "screenshot_%Y-%m-%d-%H-%M-%S" => WAYSHOT_FILENAME_FORMAT "Filename format"
 

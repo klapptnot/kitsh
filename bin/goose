@@ -202,6 +202,7 @@ function google_search {
       GOOGLE_RESULT_DESC[i]="${desc:-null}"
       GOOGLE_RESULT_DATE[i]="null"
     fi
+    GOOGLE_RESULT_DESC[i]="${GOOGLE_RESULT_DESC[i]#<span>}"
     GOOGLE_RESULT_DESC[i]="${GOOGLE_RESULT_DESC[i]%</span>}"
   done
 
