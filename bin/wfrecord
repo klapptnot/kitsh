@@ -48,8 +48,7 @@ function wfrecord::start_recording {
 
   if [ -n "${WFRECORD_ENABLE_AUDIO}" ]; then
     read -r source < <(wfrecord::find_source "${WFRECORD_ENABLE_AUDIO}")
-    [ -z "${source}" ] && wfrecord::exit_msg 'No active audio source found, specify manually'
-    cmd+=(--audio="${source}")
+    [ -n "${source}" ] && cmd+=(--audio="${source}") || printf '\x1b[38;5;3m[ UPS ]\x1b[00m No active audio source found, specify manually\n' >&2
   fi
 
   wfrecord::indicate_recording
@@ -115,14 +114,6 @@ function wfrecord::record_window {
 function main {
   read -r USER_VIDS_DIR < <(xdg-user-dir VIDEOS)
 
-  for cmd in wf-recorder slurp hyprctl xdg-user-dir; do
-    read -r COMMAND < <(type -p "${cmd}")
-    if [ -z "${COMMAND}" ]; then
-      wfrecord::exit_msg 'Command "%s" not found in PATH\n' "${cmd}"
-    fi
-  done
-  unset COMMAND
-
   local _epilog_lines=(
     '{acc}Examples:\x1b[0m'
     '  wfrecord'
@@ -162,6 +153,14 @@ function main {
   @screen s/start-stop :flag => WFRECORD_SCREEN_START_STOP "Try to start recording, or stop current session"
 EOF
   barg::unload
+
+  for cmd in wf-recorder slurp hyprctl xdg-user-dir; do
+    read -r cmd_path < <(type -p "${cmd}")
+    if [ -z "${cmd_path}" ]; then
+      wfrecord::exit_msg "Command '${cmd}' not found in PATH\n"
+    fi
+  done
+  unset cmd_path
 
   [ ! -d "${WFRECORD_FOLDER}" ] && mkdir -p "${WFRECORD_FOLDER}"
   read -r SAVE_PATH < <(date +"${WFRECORD_FILENAME_FORMAT}")

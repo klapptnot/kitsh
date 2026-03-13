@@ -7,6 +7,12 @@ include barg.sh
 include rsum.sh
 include logger.sh
 
+readonly BARG_SET_LABELS_NOTIFY_NOTIFICATION_HANDLER=(
+  "Send desktop notifications using DBus"
+  "Send notifications to a ntfy.sh server"
+  "Send notification to ntfy.sh and DBus"
+)
+
 function miku::loves::you::back {
   # This function is just an easter egg
   # whenever the click action is "I love Hatsune Miku"
@@ -332,11 +338,11 @@ function main {
 
   @send h/handler [
     "dbus" "ntfy" "both"
-  ] => NOTIFY_NOTIFICATION_HANDLER "Select notification backend: D-Bus, ntfy.sh, or both"
+  ] "dbus" => NOTIFY_NOTIFICATION_HANDLER "Select notification backend: D-Bus, ntfy.sh, or both"
 
   @send p/priority [
-    "def" "max" "high" "low" "min"
-  ] => NOTIFY_BOTH_PRIORITY "Set notification priority level for supported handlers"
+    "max" "high" "def" "low" "min"
+  ] "def" => NOTIFY_BOTH_PRIORITY "Set notification priority level for supported handlers"
 
   @send a/action :strs => NOTIFY_BOTH_ACTIONS "Add one or more actions/buttons to the notification"
   @send c/click :str => NOTIFY_BOTH_CLICK_ACTION "Action executed when the notification body is clicked"

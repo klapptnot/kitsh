@@ -11,9 +11,10 @@ function wayshot::exit_msg {
 }
 
 function wayshot::indicate_take {
-  slurp -b#67469860 &
+  [ -z "${WAYSHOT_FLASH_COLOR}" ] && return
+  slurp -b"${WAYSHOT_FLASH_COLOR}" &
   local pid=${!}
-  sleep 0.2
+  sleep 0.1
   kill -9 ${pid}
   jobs &> /dev/null
 }
@@ -23,13 +24,19 @@ function wayshot::take_capture {
     wayshot::exit_msg 'Unable to take a screen capture'
   }
 
+  if ${WAYSHOT_OCR_TEXT}; then
+    command -v 'tesseract' &> /dev/null || wayshot::exit_msg "No text extracted, tesseract not found"
+    tesseract "${1}" stdout 2> /dev/null | wl-copy --type 'text/plain;charset=utf-8'
+    return 0
+  fi
+
   if ${WAYSHOT_UPSCALE}; then
     magick "${1}" -filter Lanczos -resize 200% "${1}" || {
       wayshot::exit_msg 'Unable to upscale the screenshot, check the output of "magick" command'
     }
   fi
 
-  "${WAYSHOT_NOCLIPBOARD}" && return
+  "${WAYSHOT_NOCLIPBOARD}" && return 0
 
   local mimetype="image/"
 
@@ -86,14 +93,6 @@ function wayshot::shot_window {
 function main {
   read -r USER_PICS_DIR < <(xdg-user-dir PICTURES)
 
-  for cmd in grim slurp hyprctl xdg-user-dir wl-paste; do
-    read -r COMMAND < <(type -p "${cmd}")
-    if [ -z "${COMMAND}" ]; then
-      wayshot::exit_msg 'Command "%s" not found in PATH\n' "${COMMAND}"
-    fi
-  done
-  unset COMMAND
-
   local _epilog_lines=(
     '{acc}Examples{r}:'
     '  wayshot'
@@ -122,10 +121,12 @@ function main {
   }
 
   c/cursor :flag => WAYSHOT_ENABLE_CURSOR "Include cursor in screenshot"
-  b/no-clipboard :flag => WAYSHOT_NOCLIPBOARD 'Do not copy to clipboard'
+  b/no-clipboard :flag => WAYSHOT_NOCLIPBOARD 'Do not copy image to clipboard'
   u/upscale :flag => WAYSHOT_UPSCALE "Upscale by 200% (requires image magick CLI)"
+  e/extract-text :flag => WAYSHOT_OCR_TEXT "Extract text from selection (requires tesseract, implies -b)"
   t/filetype ["png" "ppm" "jpeg"] "png" => WAYSHOT_FILETYPE "File format: png, ppm, jpeg"
   f/folder :str "${USER_PICS_DIR}/Screenshots" => WAYSHOT_FOLDER "Output folder"
+  F/flashc :str "#c299ff60" => WAYSHOT_FLASH_COLOR "Taken screenshot flash color, empty to disable"
   n/filename :str "screenshot_%Y-%m-%d-%H-%M-%S" => WAYSHOT_FILENAME_FORMAT "Filename format"
 
   @region r/region :str "" => WAYSHOT_DISPLAY_REGION "Use a predefined region"
@@ -133,6 +134,14 @@ function main {
   @region C/border-color :str "#fff0cfff" => WAYSHOT_REGION_BORDER_COLOR "Region selection border color"
 EOF
   barg::unload
+
+  for cmd in grim slurp hyprctl xdg-user-dir wl-paste; do
+    read -r cmd_path < <(type -p "${cmd}")
+    if [ -z "${cmd_path}" ]; then
+      wayshot::exit_msg "Command '${cmd}' not found in PATH\n"
+    fi
+  done
+  unset cmd_path
 
   [ ! -d "${WAYSHOT_FOLDER}" ] && mkdir -p "${WAYSHOT_FOLDER}"
   read -r SAVE_PATH < <(date +"${WAYSHOT_FILENAME_FORMAT}")

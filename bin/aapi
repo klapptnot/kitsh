@@ -65,7 +65,7 @@ case ${1} in
     list_apis
     exit 0
     ;;
-  -nucomp)
+  @nucomp)
     nucomp_get "${@:3}"
     exit 0
     ;;

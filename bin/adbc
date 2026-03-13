@@ -36,12 +36,12 @@ function try_cached_connection {
 
   local device
   read -r device < <(grep -oP "${host}:[0-9]{4,5}" "${cache_file}") || {
-    rm -f "${cache_file}" 2> /dev/null
+    log debug "no cache for host ${host}"
     return 1
   }
 
   if adb connect "${device}" | grep -q 'failed'; then
-    rm -f "${cache_file}" 2> /dev/null
+    log debug "cache stale for host ${host}"
     return 1
   fi
 
@@ -113,6 +113,7 @@ function main {
   try_cached_connection "${host}" "${cache_file}" && exit 0
   touch "${cache_file}"
 
+  log debug 'Scanning ports...'
   local port
   read -r port < <(find_adb_port "${host}" "${port_range}")
 
@@ -126,7 +127,7 @@ function main {
 
   if adb connect "${device}" &> /dev/null; then
     if grep -q "^${host}:" "${cache_file}"; then
-      sed -Ei "s/^${host}:[0-9]{4,5}$/${device}/"
+      sed -Ei "s/^${host}:[0-9]{4,5}$/${device}/" "${cache_file}"
     else
       printf '%s\n' "${device}" >> "${cache_file}"
     fi
