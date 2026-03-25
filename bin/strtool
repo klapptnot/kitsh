@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+include nucompletion-adapter.sh
+
+BASHLIB_SCRIPTS="${BASHLIB_SCRIPTS:-$HOME/.config/bash/lib}"
+
+function strtool::help {
+  printf 'Usage: strtool <command> [flag] [args...]\n\n'
+  printf 'Commands:\n'
+  printf '  xor <key>         XOR-encrypt/decrypt stdin with the given key\n'
+  printf '  escape [flag]     Escape stdin content\n'
+  printf '    --uri             Percent-encode (URI)\n'
+  printf '    --xml             XML escape (&amp; &lt; etc.)\n'
+  printf '    --deep-xml        XML escape all characters\n'
+  printf '    --ansi            ANSI/string escape (default)\n'
+  printf '  unescape [flag]   Unescape stdin content\n'
+  printf '    --uri             Percent-decode (URI)\n'
+  printf '    --xml             XML unescape\n'
+  printf '    (default)         String unescape\n'
+  printf '  strip             Strip ANSI escape codes from stdin\n'
+  printf '  rgb_hex           Convert RGB to hex\n'
+  printf '  hex_rgb           Convert hex to RGB\n'
+  printf '  help              Show this message\n'
+}
+
+function strtool::complete {
+  # $1 = command name, $2.. = current argv on the command line
+  local -r cmd_name="${1}"
+  local -r current_cmd="${2:-}"
+  local -r current_flag="${3:-}"
+
+  local -a all_cmds=(
+    'xor' 'XOR encrypt/decrypt with key'
+    'escape' 'Escape stdin'
+    'unescape' 'Unescape stdin'
+    'strip' 'Strip ANSI codes'
+    'rgb_hex' 'RGB to hex'
+    'hex_rgb' 'Hex to RGB'
+    'help' 'Show help'
+  )
+
+  local -A escape_flags=(
+    ['--uri']='Percent-encode (URI)'
+    ['--xml']='XML escape'
+    ['--deep-xml']='XML escape all characters'
+    ['--ansi']='ANSI/string escape (default)'
+  )
+
+  local -A unescape_flags=(
+    ['--uri']='Percent-decode (URI)'
+    ['--xml']='XML unescape'
+  )
+
+  # completing the subcommand itself
+  if [[ -z "${current_cmd}" || ${#} -le 2 ]]; then
+    local -a filtered=()
+    local i
+    for ((i = 0; i < ${#all_cmds[@]}; i += 2)); do
+      local name="${all_cmds[i]}"
+      local desc="${all_cmds[i + 1]}"
+      [[ "${name}" == "${current_cmd}"* ]] && filtered+=("${name} 	${desc}")
+    done
+    printf '%s\n' "${filtered[@]}" | nucompletion-adapter
+    return
+  fi
+
+  # completing the flag for escape/unescape
+  local -n flag_map_ref
+  case "${current_cmd}" in
+    escape) declare -n flag_map_ref='escape_flags' ;;
+    unescape) declare -n flag_map_ref='unescape_flags' ;;
+    *) return ;;
+  esac
+
+  local -a filtered=()
+  local flag
+  for flag in "${!flag_map_ref[@]}"; do
+    for f in "${@:2}"; do
+      [[ "${flag}" == "${f}" ]] && continue 2
+    done
+    [[ "${flag}" == "${current_flag}"* ]] && filtered+=("${flag} 	${flag_map_ref[${flag}]}")
+  done
+  printf '%s\n' "${filtered[@]}" | nucompletion-adapter
+}
+
+function main {
+  local cmd="${1}"
+  local flag="${2}"
+  shift 2
+
+  local script_file=""
+
+  case "${cmd}" in
+    @nucomp)
+      strtool::complete "${flag}" "${@}"
+      return
+      ;;
+    help | --help | -h)
+      strtool::help
+      return
+      ;;
+    xor)
+      mapfile -d '' all < /dev/stdin
+      local -ir chunks_c="${#all[@]}"
+
+      local key="${flag}"
+      local key_len="${#key}"
+
+      local transformed=''
+      local -i char_val key_val
+      local LC_ALL='C'
+      local kc=0
+      for ((h = 0; h < chunks_c; h++)); do
+        local input="${all[h]}"
+        local -i total="${#input}"
+        for ((i = 0; i < total; i++)); do
+          printf -v char_val '%d' "'${input:i:1}"
+          printf -v key_val '%d' "'${key:$((kc++ % key_len)):1}"
+          printf -v transformed '%s\\x%02x' "${transformed}" "$((char_val ^ key_val))"
+        done
+        (((h + 1) < chunks_c)) && {
+          printf -v key_val '%d' "'${key:$((kc++ % key_len)):1}"
+          printf -v transformed '%s\\x%02x' "${transformed}" "$((0 ^ key_val))"
+        }
+      done
+      printf '%b' "${transformed}"
+      return
+      ;;
+    escape)
+      case "${flag}" in
+        --uri) script_file='pct_encode' ;;
+        --xml) script_file='xml_escape' ;;
+        --deep-xml) script_file='xml_escape_all' ;;
+        *) script_file='str_escape' ;;
+      esac
+      ;;
+    unescape)
+      case "${flag}" in
+        --uri) script_file='pct_decode' ;;
+        --xml) script_file='xml_unescape' ;;
+        *) script_file='str_unescape' ;;
+      esac
+      ;;
+    *)
+      declare -A direct_map=(
+        [strip]='str_strip'
+        [rgb_hex]='rgb_to_hex'
+        [hex_rgb]='hex_to_rgb'
+      )
+      script_file="${direct_map[${cmd}]:-}"
+      ;;
+  esac
+
+  if [[ -f "${BASHLIB_SCRIPTS}/${script_file}.sh" ]]; then
+    source "${BASHLIB_SCRIPTS}/${script_file}.sh"
+    "${script_file}" "${@}"
+  else
+    printf 'Error: command '\''%s'\'' not found. Run `strtool help` for usage.\n' "${cmd}" >&2
+    return 1
+  fi
+}
+
+main "${@}"

@@ -6,12 +6,13 @@
 # Usage:
 #  str_escape <<< $'A string\n\tThat will be "escaped"'
 function str_escape {
-  : "$(< /dev/stdin)"
-  local s="${_@Q}"
-  [ "${s:0:1}" == '$' ] && s="${s:1}"
-  # remove sorrounding 'string'
-  s="${s:1:-1}"
-  # `'\''` (close, add quote, reopen)
-  s="${s//\'\\\'\'/\'}"
-  printf "%s" "${s//\"/\\\"}"
+  mapfile all < /dev/stdin
+  printf -v input '%s' "${all[@]}"
+
+  input="${input@Q}"            # escape string
+  input="${input/#\$/}"         # remove leading $ (if found)
+  input="${input:1:-1}"         # remove '...' quotes added
+  input="${input//\'\\\'\'/\'}" # remove '\'' no need to escape
+  input="${input//\"/\\\"}"     # escape "
+  printf "%s" "${input}"
 }

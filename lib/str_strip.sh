@@ -9,8 +9,7 @@
 #    str_strip end   <<< "  Hi! UwU~  " # "  Hi! UwU~"
 #    str_strip       <<< "  Hi! UwU~  " # "Hi! UwU~"
 function str_strip {
-  : "$(< /dev/stdin)"
-  local s="${_}"
+  local s="$(< /dev/stdin)"
   [ "${1}" != "start" ] && s="${s%"${s##*[![:space:]\n]}"}"
   [ "${1}" != "end" ] && s="${s#"${s%%[![:space:]\n]*}"}"
   printf "%s" "${s}"

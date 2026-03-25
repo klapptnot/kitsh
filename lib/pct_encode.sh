@@ -6,8 +6,8 @@
 # Usage:
 #   pct_encode <<< "I 💜 bash" # I%20%F0%9F%92%9C%20bash
 function pct_encode {
-  local input=''
-  input="$(< /dev/stdin)"
+  mapfile all < /dev/stdin
+  printf -v input '%s' "${all[@]}"
 
   local encoded=""
   local LC_ALL="C" # support unicode loop bytes
