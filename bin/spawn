@@ -35,19 +35,13 @@ function run_on_change {
   read -r LAST_HASH < <(get_file_hash)
   log i 'Initial hash: %s' "${LAST_HASH}"
 
-  local argv=()
-  for it in "${@}"; do
-    [[ "${it}" == -* ]] && argv+=('--')
-    argv+=("${it}")
-  done
-
   while true; do
     sleep "${interval}"
     read -r CURRENT_HASH < <(get_file_hash)
 
     if [ "${CURRENT_HASH}" != "${LAST_HASH}" ]; then
       log info 'Change detected!'
-      setsid --fork spawn -r "${argv[@]}" # call this one to restart it
+      setsid --fork spawn -r "${@}" # call this one to restart it
       LAST_HASH="${CURRENT_HASH}"
     fi
   done

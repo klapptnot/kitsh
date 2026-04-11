@@ -83,7 +83,7 @@ function install {
   }
 
   echo "Installation complete!"
-  echo "Add ${LOCAL_BIN} to your PATH if not already present"
+  [[ ":${PATH}:" != *":${LOCAL_BIN}:"* ]] && echo "Add ${LOCAL_BIN} to your PATH"
 }
 
 function main {

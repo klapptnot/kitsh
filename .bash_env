@@ -1,6 +1,5 @@
 #!/usr/bin/bash
-# shellcheck disable=SC2015,SC1090
-export BASHLIB_SCRIPTS=~/.local/lib/kitsh
+export SOURCE_BASH_ANY=~/.local/lib/kitsh
 
 # A function to source library scripts from a predefined path.
 # This makes scripts available to both interactive and non-interactive shells.
@@ -9,15 +8,10 @@ export BASHLIB_SCRIPTS=~/.local/lib/kitsh
 #   <script_name>: The name of the script file to source.
 #   [arguments]: Any arguments to pass to the sourced script.
 function include {
-  local __="${1}"
-
-  [[ -f "${__}" ]] \
-    || read -r __ < <(PATH="${BASHLIB_SCRIPTS}" type -p "${__}" 2>/dev/null)
-
-  [ -z "${__}" ] && {
+  if ! read -r < <(PATH="${SOURCE_BASH_ANY}" command -v "${1}" 2>/dev/null); then
     printf 'include: %s not found\n' "${1}" >&2
     exit 127
-  }
+  fi
 
-  source "${__}" "${@:2}"
+  source "${REPLY}" "${@:2}"
 }

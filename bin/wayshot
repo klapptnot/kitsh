@@ -14,12 +14,13 @@ function wayshot::indicate_take {
   [ -z "${WAYSHOT_FLASH_COLOR}" ] && return
   slurp -b"${WAYSHOT_FLASH_COLOR}" &
   local pid=${!}
-  sleep 0.1
+  sleep 0.08
   kill -9 ${pid}
   jobs &> /dev/null
 }
 
 function wayshot::take_capture {
+  wayshot::indicate_take &
   grim "${@:2}" "${1}" 2> /dev/null || {
     wayshot::exit_msg 'Unable to take a screen capture'
   }
@@ -51,7 +52,6 @@ function wayshot::take_capture {
 }
 
 function wayshot::shot_screen {
-  wayshot::indicate_take &
   wayshot::take_capture "${1}.png" "${@:2}"
 }
 
@@ -68,12 +68,9 @@ function wayshot::shot_region {
     kill -9 "${pid}"
   fi
 
-  if [ -n "${pos_n_size}" ]; then
-    wayshot::indicate_take &
-    wayshot::take_capture "${1}.png" -g "${pos_n_size}" "${@:2}"
-  fi
-
   [ -z "${pos_n_size}" ] && wayshot::exit_msg 'Nothing selected, abort'
+
+  wayshot::take_capture "${1}.png" -g "${pos_n_size}" "${@:2}"
 }
 
 function wayshot::shot_window {
@@ -86,7 +83,6 @@ function wayshot::shot_window {
   )
 
   [ "${pos_n_size}" == 'null,null nullxnull' ] && wayshot::exit_msg 'No window found, abort'
-  wayshot::indicate_take &
   wayshot::take_capture "${1}_${WCLASS}.png" -g "${pos_n_size}" "${@:2}"
 }
 

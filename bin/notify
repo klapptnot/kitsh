@@ -324,12 +324,11 @@ function main {
   meta {
     argv_zero: 'notify'
     spare_args_var: 'NOTIFY_POSITIONAL_ARGS'
-    spare_args_required: true
     subcommand_required: true
   }
 
   commands {
-    *send: "Send a notification"
+    +send: "Send a notification"
     pull: "Pull and display notifications from ntfy.sh"
     help: "Show this help message"
   }
