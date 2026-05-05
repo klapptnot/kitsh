@@ -123,6 +123,11 @@ function main {
           printf -v transformed '%s\\x%02x' "${transformed}" "$((0 ^ key_val))"
         }
       done
+      [ -z "${all[chunks_c - 1]}" ] && {
+        printf -v key_val '%d' "'${key:$((kc++ % key_len)):1}"
+        printf -v transformed '%s\\x%02x' "${transformed}" "$((0 ^ key_val))"
+      }
+
       printf '%b' "${transformed}"
       return
       ;;
