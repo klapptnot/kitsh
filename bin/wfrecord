@@ -162,6 +162,14 @@ EOF
   done
   unset cmd_path
 
+  if [[ -v SCREEN_SEL_PALETTE ]]; then
+    if [ "${BARG_SUBCOMMAND}" == 'region' ]; then
+      IFS=':' read -r sel bg flicker <<< "${SCREEN_SEL_PALETTE}"
+      [ -z "${BARG_ARGV_TABLE[WFRECORD_REGION_BORDER_COLOR]}" ] && WFRECORD_REGION_BORDER_COLOR="${sel:-${WFRECORD_REGION_BORDER_COLOR}}"
+      [ -z "${BARG_ARGV_TABLE[WFRECORD_REGION_BG_COLOR]}" ] && WFRECORD_REGION_BG_COLOR="${bg:-${WFRECORD_REGION_BG_COLOR}}"
+    fi
+  fi
+
   [ ! -d "${WFRECORD_FOLDER}" ] && mkdir -p "${WFRECORD_FOLDER}"
   read -r SAVE_PATH < <(date +"${WFRECORD_FILENAME_FORMAT}")
 

@@ -139,6 +139,15 @@ EOF
   done
   unset cmd_path
 
+  if [[ -v SCREEN_SEL_PALETTE ]]; then
+    IFS=':' read -r sel bg flicker <<< "${SCREEN_SEL_PALETTE}"
+    [ -z "${BARG_ARGV_TABLE[WAYSHOT_FLASH_COLOR]}" ] && WAYSHOT_FLASH_COLOR="${flicker:-${WAYSHOT_FLASH_COLOR}}"
+    if [ "${BARG_SUBCOMMAND}" == 'region' ]; then
+      [ -z "${BARG_ARGV_TABLE[WAYSHOT_REGION_BORDER_COLOR]}" ] && WAYSHOT_REGION_BORDER_COLOR="${sel:-${WAYSHOT_REGION_BORDER_COLOR}}"
+      [ -z "${BARG_ARGV_TABLE[WAYSHOT_REGION_BG_COLOR]}" ] && WAYSHOT_REGION_BG_COLOR="${bg:-${WAYSHOT_REGION_BG_COLOR}}"
+    fi
+  fi
+
   [ ! -d "${WAYSHOT_FOLDER}" ] && mkdir -p "${WAYSHOT_FOLDER}"
   read -r SAVE_PATH < <(date +"${WAYSHOT_FILENAME_FORMAT}")
 
