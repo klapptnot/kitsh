@@ -1,13 +1,12 @@
 #!/usr/bin/bash
-# 🔗 https://github.com/klapptnot/bash.sh
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 include barg.sh
 include logger.sh
 
 function get_file_hash {
-  ls -lh --time-style=full-iso "${SPAWN_WATCH_PATH}" 2> /dev/null | md5sum | cut -d ' ' -f 1
+  ls -lh --time-style=full-iso "${SPAWN_WATCH_PATH}" 2>/dev/null | md5sum | cut -d ' ' -f 1
 }
 
 function time_parse {
@@ -28,25 +27,6 @@ function time_parse {
   printf '%s %s\n' "${t_sec}" "${t_str}"
 }
 
-function run_on_change {
-  local interval="${1}"
-  shift 1
-
-  read -r LAST_HASH < <(get_file_hash)
-  log i 'Initial hash: %s' "${LAST_HASH}"
-
-  while true; do
-    sleep "${interval}"
-    read -r CURRENT_HASH < <(get_file_hash)
-
-    if [ "${CURRENT_HASH}" != "${LAST_HASH}" ]; then
-      log info 'Change detected!'
-      setsid --fork spawn -r "${@}" # call this one to restart it
-      LAST_HASH="${CURRENT_HASH}"
-    fi
-  done
-}
-
 function spawner {
   sleep "${1:?}" || return
   shift 1
@@ -54,13 +34,13 @@ function spawner {
   read -r USER_ID < <(id -u)
 
   if ${SPAWN_RESTART}; then
-    if pgrep -U "${USER_ID}" "${SPAWN_EXEC_LINE[0]}" &> /dev/null; then
+    if pgrep -U "${USER_ID}" "${SPAWN_EXEC_LINE[0]}" &>/dev/null; then
       pkill -U "${USER_ID}" --signal SIGKILL "${SPAWN_EXEC_LINE[0]}"
     fi
   fi
 
   ${SPAWN_GO_FS_ROOT} && {
-    cd / &> /dev/null || {
+    cd / &>/dev/null || {
       log e "Failed to change dir to root (/)" && return
     }
   }
@@ -79,7 +59,7 @@ function main {
     "  \`-a/--run-at\` format is: seconds:minutes:hours:days, default: 0:0:0:0"
     "  \`-a/--run-at\` with -w/--watch-file format is the same as sleep command"
   )
-  barg::parse "${@}" << BARG
+  barg::parse "${@}" <<BARG
   #[always]
   meta {
     summary: "Command line tool to spawn processes"
@@ -93,25 +73,25 @@ function main {
   r/restart :flag => SPAWN_RESTART "Restart the process if it is already running"
   c/cwd-root :flag => SPAWN_GO_FS_ROOT "Change PWD / to prevent locking CWD"
   k/keep :flag true => SPAWN_IN_BACKGROUND "Do not detach from caller terminal"
-  w/watch-file :str => SPAWN_WATCH_PATH "Run when file is updated, --run-at for interval"
+  w/watch :str => SPAWN_WATCH_PATH "Run when entry is updated, --run-at for interval"
   a/run-at :str "" => SPAWN_AT_TIME "Time to wait before spawning the process"
   g/as-gnome :flag => SPAWN_AS_GNOME "Launch the process as a GNOME session"
   u/uwsm :flag => SPAWN_WITH_UWSM "Spawn process using uwsm"
   L/logger :int => SPAWN_LOGGER_LEVEL "Logging level"
 BARG
   if [[ -n "${BARG_ARGV_TABLE[SPAWN_WATCH_PATH]}" && ! -e "${SPAWN_WATCH_PATH}" ]]; then
-    barg::exit_msg "Directory not found" "Arg for '-d/--dir-file' must be an existing file or folder"
+    barg::exit_msg "Directory not found" "Arg for '-w/--watch' must be an existing file or folder"
   fi
   barg::unload
 
   log::setup "${SPAWN_LOGGER_LEVEL}"
 
-  if ${SPAWN_WITH_UWSM} && ! command -v uwsm &> /dev/null; then
+  if ${SPAWN_WITH_UWSM} && ! command -v uwsm &>/dev/null; then
     log e 'The command uwsm is not an executable'
     return 1
   fi
 
-  if ! command -v "${SPAWN_EXEC_LINE[0]}" &> /dev/null; then
+  if ! command -v "${SPAWN_EXEC_LINE[0]}" &>/dev/null; then
     log e 'The command %s is not an executable' "${SPAWN_EXEC_LINE[0]}"
     return 1
   fi
@@ -127,11 +107,16 @@ BARG
   log d 'Command to run: %s' "${cmd_line}"
 
   [ -n "${SPAWN_WATCH_PATH}" ] && {
-    run_on_change "${SPAWN_AT_TIME:-0.5}" "${SPAWN_EXEC_LINE[@]}"
+    inotifywait --monitor --recursive --quiet -e modify,create,delete,move "${SPAWN_WATCH_PATH}" |
+      while read -r directory events filename; do
+        while read -t 0.1 -r _; do continue; done
+        log info 'Change detected!'
+        setsid --fork spawn -r "${SPAWN_EXEC_LINE[@]}"
+      done
     return
   }
 
-  read -r t_sec t_str < <(time_parse <<< "${SPAWN_AT_TIME:-0:0:0:0}")
+  read -r t_sec t_str < <(time_parse <<<"${SPAWN_AT_TIME:-0:0:0:0}")
 
   if ((t_sec > 0)); then
     if ${SPAWN_RESTART}; then

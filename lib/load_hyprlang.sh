@@ -1,10 +1,7 @@
 #!/usr/bin/bash
-
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
-# SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 function load_hyprlang {
   [ -z "${1}" ] && return 1
   local config_file="${1}"

@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 # Usage:
 #   hex_to_rgb <<< "#784dFF" # rgb(120,77,255)

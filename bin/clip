@@ -1,7 +1,7 @@
 #!/usr/bin/bash
-# termux only
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
+# termux only
 
 BINEXEC="/data/data/com.termux/files/usr/libexec/termux-api"
 

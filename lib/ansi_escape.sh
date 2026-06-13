@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 # Usage:
 #  ansi_escape <<< $'\x1b[38;5;12mHello World!\x1b[0m' # '\x1b[38;5;12mHello World!\x1b[0m'

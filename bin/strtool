@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Upstream: https://github.com/klapptnot/kitsh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 include nucompletion-adapter.sh
 

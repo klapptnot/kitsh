@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 # Display a nice functional progress bar
 # Usage: rsum [options]

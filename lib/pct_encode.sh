@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-# 🔗 https://github.com/klapptnot/bash.sh
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 # Usage:
 #   pct_encode <<< "I 💜 bash" # I%20%F0%9F%92%9C%20bash

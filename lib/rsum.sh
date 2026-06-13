@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-# 🔗 https://github.com/klapptnot/bash.sh
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 # Function to easy generate (random) strings
 # Usage: rsum [options]
@@ -67,7 +66,7 @@ function rsum {
     esep="${esep:1:-1}"
     tr -dc "${charset}" < /dev/urandom 2> >(sed 's/^tr:/rsum:/' >&2) | head -c "$((length * times))" | sed "s/\(.\{1,${length}\}\)/\1${esep}/g;s/${esep}$//"
     ${break_line} && echo '' 2> /dev/null
-    return
+    return 0
   }
 
   tr -dc "${charset}" < /dev/urandom 2> >(sed 's/^tr:/rsum:/' >&2) | head -c "${length}"

@@ -1,7 +1,6 @@
 #!/usr/bin/bash
-# 🔗 https://github.com/klapptnot/bash.sh
+# Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2025-present Klapptnot
 
 function term.color.from_hex {
   read -r s < /dev/stdin

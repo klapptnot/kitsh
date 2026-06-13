@@ -1,0 +1,363 @@
+#!/usr/bin/bash
+# Upstream: https://github.com/klapptnot/kitsh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+include barg.sh
+
+function vcam::exit_msg {
+  printf '\x1b[38;5;1m[ ERR ]\x1b[00m %b\n' "${*}" >&2
+  exit 1
+}
+
+function vcam::ok_msg {
+  printf '\x1b[38;5;2m[ OK  ]\x1b[00m %b\n' "${*}" >&2
+}
+
+function vcam::get_active_stream {
+  local dev="${VCAM_DEVICE}"
+  local pids
+  read -r pids < <(fuser "${dev}" 2> /dev/null)
+
+  for pid in ${pids}; do
+    # Only care if it's our process
+    if grep -qaz '^VCAM_BASH=1$' "/proc/${pid}/environ" 2> /dev/null; then
+      local exe bin
+      read -r exe < <(readlink "/proc/${pid}/exe")
+      bin="${exe##*/}"
+
+      case "${bin}" in
+        wf-recorder)
+          local size
+          read -r size < <(ps -o args= -p "${pid}" | grep -oP "[0-9]+,[0-9]+ [0-9]+x[0-9]+")
+          printf 'screen %s (wf-recorder)\n' "${size}"
+          return
+          ;;
+        ffmpeg)
+          local file
+          read -r file < <(ps -o args= -p "${pid}" | awk '{for(i=1;i<NF;i++) if($i=="-i") print $(i+1)}')
+          printf 'file %s (ffmpeg)\n' "${file##*/}"
+          return
+          ;;
+        *)
+          printf '%s (unknown producer)\n' "${bin}"
+          return
+          ;;
+      esac
+    fi
+  done
+  printf 'None\n'
+}
+
+function vcam::get_user_apps {
+  local dev="${VCAM_DEVICE}"
+  local pids
+  read -r pids < <(fuser "${dev}" 2> /dev/null)
+
+  local consumers=()
+  for pid in ${pids}; do
+    # If it DOES NOT have our environment variable, it is a consumer
+    if ! grep -qaz '^VCAM_BASH=1$' "/proc/${pid}/environ" 2> /dev/null; then
+      consumers+=("${pid}")
+    fi
+  done
+
+  if ((${#consumers[@]} > 0)); then
+    ps -o comm= -p "${consumers[@]}" 2> /dev/null | xargs
+  else
+    printf 'None\n'
+  fi
+}
+
+function vcam::stop {
+  local dev="${VCAM_DEVICE}"
+
+  read -ra pids < <(fuser "${dev}" 2> /dev/null)
+
+  if [ -n "${pids}" ]; then
+    for pid in "${pids[@]}"; do
+      # Check if our env var exists in the process environment
+      # Strings in /proc/$pid/environ are null-terminated (\0)
+      if grep -qaz '^VCAM_BASH=1$' "/proc/${pid}/environ" 2> /dev/null; then
+        vcam::ok_msg "Killing existing vcam producer (PID: ${pid})"
+        kill -9 "${pid}"
+      fi
+    done
+  fi
+}
+
+function vcam::find_active_card {
+  local card
+  # Prioritize card1 if it exists (common for dGPU/Hyprland setups), else loop
+  for card in /dev/dri/card[1-0]; do
+    if [ -e "${card}" ]; then
+      # Check if this card actually has an active framebuffer
+      if grep -q '^connected' /sys/class/drm/card${card##*card}-*/status 2> /dev/null; then
+        printf '%s' "${card}"
+        return 0
+      fi
+    fi
+  done
+
+  # If detection fails, find the first card that exists
+  read -r card < <(find /dev/dri -name 'card*' | sort -r | head -n 1)
+  printf '%s' "${card:-/dev/dri/card0}"
+}
+
+function vcam::status {
+  if ! lsmod | grep -q v4l2loopback; then
+    printf '  Module: \x1b[31mNOT LOADED\x1b[0m\n'
+    return
+  fi
+
+  read -r caps < /sys/module/v4l2loopback/parameters/exclusive_caps
+  read -r stream < <(vcam::get_active_stream)
+  read -r readers < <(vcam::get_user_apps)
+
+  local size=""
+  if [ "${stream}" != 'None' ]; then
+    read -r size < <(v4l2-ctl --device="${VCAM_DEVICE}" --get-fmt-video | grep -E 'Width|Height|Video Format' | sed 's/.*://')
+  fi
+
+  printf '  Device:      %s\n' "${VCAM_DEVICE}"
+  printf '  Label:       %s\n' "$(v4l2-ctl --device="${VCAM_DEVICE}" --all | grep "Card type" | cut -d: -f2 | xargs)"
+  printf '  Exclusive:   %s\n' "$([[ "${caps:0:1}" == 'Y' ]] && printf 'true' || printf 'false')"
+  printf '  Streaming:   %s\n' "${stream:-Nothing}"
+  [ -n "${size}" ] && printf '  Size:        %s\n' "${size/\//x}"
+  printf '  Used by:     %s\n' "${readers:-None}"
+}
+
+function vcam::init_module {
+  vcam::ok_msg 'Resetting v4l2loopback with custom properties...'
+
+  if lsmod | grep -q v4l2loopback; then
+    sudo modprobe -r v4l2loopback 2> /dev/null || vcam::exit_msg 'Module busy. Close browser/OBS first.'
+  fi
+
+  local mod_args=(
+    "card_label=${VCAM_LABEL:-Virtual-Cam}"
+    "max_buffers=${VCAM_BUFFERS:-32}"
+  )
+  ${VCAM_EXCLUSIVE} && mod_args+=('exclusive_caps=1')
+
+  if [[ "${VCAM_DEVICE}" =~ video([0-9]+) ]]; then
+    mod_args+=("video_nr=${BASH_REMATCH[1]}")
+  fi
+
+  sudo modprobe v4l2loopback "${mod_args[@]}"
+  vcam::ok_msg "Initialized with: ${mod_args[*]}"
+}
+
+function vcam::handle_screen {
+  local geometry="${1}"
+
+  vcam::ok_msg "Starting wf-recorder: ${BARG_SUBCOMMAND} -> ${VCAM_DEVICE}"
+  # --no-damage. disables 'damage' optimization (continuous recording)
+  # This prevents the camera from "freezing" when the screen is static
+  VCAM_BASH=1 wf-recorder \
+    --file "${VCAM_DEVICE}" \
+    --framerate "${VCAM_FRAMERATE}" \
+    --geometry "${geometry}" \
+    --no-damage \
+    --muxer v4l2 \
+    --codec rawvideo \
+    --pixel-format yuv420p \
+    &> /dev/null &
+
+  disown "${!}"
+}
+
+function vcam::run_ffmpeg {
+  local input_args=("${@}")
+  local input_file=""
+
+  # 1. Resolve Active DRM Card for screen/region/window subcommands
+  local dri_card
+  read -r dri_card < <(vcam::find_active_card)
+
+  # 2. Extract input file (if it exists) to probe dimensions
+  for ((i = 0; i < ${#input_args[@]}; i++)); do
+    if [[ "${input_args[i]}" == '-i' ]]; then
+      # If the input is the placeholder for the screen, swap it with the real card
+      if [[ "${input_args[i + 1]}" == 'TARGET_CARD' ]]; then
+        input_args[i + 1]="${dri_card}"
+        # For screen capture, we probe the card's resolution instead of a file
+        read -r width height < <(v4l2-ctl --device="${dri_card}" --all 2> /dev/null | awk '/Width\/Height/ {print $3}' | tr '/' '\n')
+      else
+        input_file="${input_args[i + 1]}"
+      fi
+      break
+    fi
+  done
+
+  # Fallback if probing failed or if it's a file
+  if [ -n "${input_file}" ]; then
+    {
+      read -r width
+      read -r height
+    } < <(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "${input_file}" | tr 'x' '\n')
+  fi
+
+  # 1. Ensure minimum 1280x720
+  ((width < 1280)) && width=1280
+  ((height < 720)) && height=720
+
+  # 2. Aspect Ratio snapping logic via awk
+  local final_w final_h
+  {
+    read -r final_w
+    read -r final_h
+  } < <(awk -v w="${width}" -v h="${height}" 'BEGIN {
+    ratio = w / h
+
+    # Define candidates
+    r169  = 16/9
+    r1610 = 16/10
+    r43   = 4/3
+
+    # Calculate absolute differences
+    d169  = (ratio - r169);  if (d169 < 0)  d169  = -d169
+    d1610 = (ratio - r1610); if (d1610 < 0) d1610 = -d1610
+    d43   = (ratio - r43);   if (d43 < 0)   d43   = -d43
+
+    # Snap to closest and calculate even dimensions
+    if (d169 <= d1610 && d169 <= d43) {
+        tw = w; th = (w * 9 / 16)
+    } else if (d1610 <= d169 && d1610 <= d43) {
+        tw = w; th = (w * 10 / 16)
+    } else {
+        tw = w; th = (w * 3 / 4)
+    }
+
+    # Output even numbers (divisible by 2)
+    printf "%d\n%d\n", (tw % 2 == 0 ? tw : tw - 1), (int(th) % 2 == 0 ? int(th) : int(th) - 1)
+  }')
+
+  local v_filter="fps=${VCAM_FRAMERATE},scale=${final_w}:${final_h}:force_original_aspect_ratio=decrease,pad=${final_w}:${final_h}:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
+
+  if [ -n "${VCAM_SLOWDOWN}" ]; then
+    local pts_val
+    read -r pts_val < <(awk -v s="${VCAM_SLOWDOWN}" 'BEGIN { printf "%.4f", 1/s }')
+    v_filter="setpts=${pts_val}*PTS,${v_filter}"
+  fi
+
+  VCAM_BASH=1 ffmpeg -hide_banner -loglevel error "${input_args[@]}" \
+    -vf "${v_filter}" \
+    -f v4l2 "${VCAM_DEVICE}" &
+
+  local pid="${!}"
+  disown "${pid}"
+  vcam::ok_msg "Stream active (PID: ${pid}) at ${final_w}x${final_h} [${BARG_SUBCOMMAND}]"
+}
+
+function main {
+  local _epilog_lines=(
+    '{acc}Examples:\x1b[0m'
+    '  vcam init --label "Ari Cam" --buffers 64'
+    '  vcam status'
+    '  vcam file ~/miku.png'
+    '  vcam region'
+  )
+
+  barg::parse "${@}" << EOF
+  #[always]
+  meta {
+    argv_zero: 'vcam'
+    summary: 'Customizable Virtual Camera Automator'
+    spare_args_var: 'VCAM_EXTRAS'
+    epilog_lines: '_epilog_lines'
+    show_defaults: true
+    help_enabled: true
+    subcommand_required: true
+  }
+
+  commands {
+    init:   "Configure and load v4l2loopback"
+    status: "Show current vcam health and usage"
+    close:  "Unload v4l2loopback module"
+    stop:   "Kill active streams"
+    +file:  "Stream media file"
+    screen: "Capture entire screen"
+    region: "Capture region"
+    window: "Capture active window"
+    scrcpy: "Cast Android screen to cam"
+    *adbcam: "Read cam from Android device"
+  }
+
+  d/device :str "/dev/video2" => VCAM_DEVICE "Target device node"
+  r/fps :int 30 => VCAM_FRAMERATE "Stream framerate"
+
+  @adbcam c/cam-id :int 0 => VCAM_CAM_ID "Android camera ID to use"
+  @adbcam q/cam-size :str "1920x1080" => VCAM_CAM_SIZE "Android camera ID to use"
+
+  @screen F/force-ffmpeg :flag => VCAM_FORCE_FFMPEG "Bypass wf-recorder"
+  @region F/force-ffmpeg :flag => VCAM_FORCE_FFMPEG "Bypass wf-recorder"
+  @window F/force-ffmpeg :flag => VCAM_FORCE_FFMPEG "Bypass wf-recorder"
+
+  @init l/label :str "Virtual-Cam" => VCAM_LABEL "Card name for browser"
+  @init b/buffers :int 32 => VCAM_BUFFERS "Max buffers (v4l2loopback)"
+  @init e/exclusive :flag true => VCAM_EXCLUSIVE "Exclusive caps"
+
+  @file t/trim :int 0 => VCAM_TRIM_END "Trim last 5 frames"
+  @file s/slow :str => VCAM_SLOWDOWN "Slowdown factor (e.g. 0.5)"
+EOF
+  barg::unload
+
+  case "${BARG_SUBCOMMAND}" in
+    init) vcam::init_module ;;
+    close) sudo modprobe -r v4l2loopback ;;
+    stop) vcam::stop ;;
+    status) vcam::status ;;
+    scrcpy)
+      scrcpy \
+        --v4l2-sink=${VCAM_DEVICE} \
+        --no-playback --no-window "${VCAM_EXTRAS[@]}"
+      ;;
+    adbcam)
+      scrcpy \
+        --video-source=camera \
+        --camera-fps=${VCAM_FRAMERATE} \
+        --camera-id=${VCAM_CAM_ID} \
+        --camera-size=${VCAM_CAM_SIZE} \
+        --video-bit-rate=20M \
+        --v4l2-sink=${VCAM_DEVICE} \
+        --no-playback --no-window "${VCAM_EXTRAS[@]}"
+      ;;
+    file)
+      lsmod | grep -q v4l2loopback || vcam::init_module
+      vcam::stop
+
+      local file="${VCAM_EXTRAS[0]}"
+      local args=('-re')
+
+      file --mime-type "${file}" | grep -q 'image/' && args+=('-loop' '1') || args+=('-stream_loop' '-1')
+
+      if ((VCAM_TRIM_END > 0)); then
+        read -r total < <(ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 "${file}")
+        args+=('-vf' "trim=end_frame=$((total - VCAM_TRIM_END)),setpts=PTS-STARTPTS")
+      fi
+
+      args+=('-i' "${file}")
+      vcam::run_ffmpeg "${args[@]}"
+      ;;
+    screen | region | window)
+      lsmod | grep -q v4l2loopback || vcam::init_module
+      local geo=''
+      case "${BARG_SUBCOMMAND}" in
+        screen) read -r geo < <(hyprctl monitors -j | jq -r '.[0] | "0,0 " + (.width|tostring) + "x" + (.height|tostring) ') ;;
+        region) read -r geo < <(slurp -b '#ff464660' -c '#ff6b6bff') ;;
+        window) read -r geo < <(hyprctl activewindow -j | jq -rM '(.at[0]|tostring) + "," + (.at[1]|tostring) + " " + (.size[0]|tostring) + "x" + (.size[1]|tostring)') ;;
+      esac
+      if [ -n "${geo}" ]; then
+        if [[ "${VCAM_FORCE_FFMPEG}" == 'true' ]]; then
+          read -r coords size <<< "${geo}"
+          geo="${size/x/:}:${coords/,/:}"
+          vcam::run_ffmpeg -f kmsgrab -i /dev/dri/card1 -filter_complex "hwdownload,format=bgr0,crop=${geo}"
+        else
+          vcam::handle_screen "${geo}"
+        fi
+      fi
+      ;;
+  esac
+}
+
+main "${@}"
