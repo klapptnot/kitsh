@@ -2,8 +2,8 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include rsum.sh
-include barg.sh
+source rsum.sh
+source barg.sh
 
 function image_metadata_get {
   local what="${1}"

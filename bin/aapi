@@ -5,7 +5,7 @@
 
 # shellcheck disable=SC2086,SC2068
 
-include nucompletion-adapter.sh
+source nucompletion-adapter.sh
 
 function help {
   printf 'API - A way to use Termux:API APIs, since expansion was needed.\n\n'

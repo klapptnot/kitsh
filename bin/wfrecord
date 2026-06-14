@@ -2,7 +2,7 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include barg.sh
+source barg.sh
 
 function wfrecord::exit_msg {
   printf '\x1b[38;5;1m[ ERR ]\x1b[00m %b\n' "${*}" >&2

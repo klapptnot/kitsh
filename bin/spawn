@@ -2,8 +2,8 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include barg.sh
-include logger.sh
+source barg.sh
+source logger.sh
 
 function get_file_hash {
   ls -lh --time-style=full-iso "${SPAWN_WATCH_PATH}" 2>/dev/null | md5sum | cut -d ' ' -f 1

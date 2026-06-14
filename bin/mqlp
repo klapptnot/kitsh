@@ -2,7 +2,7 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include str_strip.sh
+source str_strip.sh
 
 # Initialize the SQLite database
 function initialize_db {

@@ -2,8 +2,8 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include logger.sh
-include load_conf.sh
+source logger.sh
+source load_conf.sh
 
 function show_help_msg {
   cat << EOF

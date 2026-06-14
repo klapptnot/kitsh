@@ -2,7 +2,7 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include logger.sh
+source logger.sh
 
 # Sleep time in seconds
 readonly SLEEP_TIME="${SLEEP_TIME:-5}"

@@ -2,12 +2,12 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include logger.sh
-include str_escape.sh
-include xml_unescape.sh
-include url_params.sh
-include load_conf.sh
-include barg.sh
+source logger.sh
+source str_escape.sh
+source xml_unescape.sh
+source url_params.sh
+source load_conf.sh
+source barg.sh
 
 readonly BARG_SET_LABELS_GOOSE_LANGUAGE_RESTRICT=(
   'Afar' 'Abkhazian' 'Avestan' 'Afrikaans' 'Akan' 'Amharic' 'Aragonese'

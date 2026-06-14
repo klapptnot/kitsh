@@ -2,7 +2,7 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include pct_encode.sh
+source pct_encode.sh
 
 # Genreate a URL param string based on a associative array
 # Usage:

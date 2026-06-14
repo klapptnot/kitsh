@@ -6,8 +6,8 @@
 # Pure-FTPd Server Wrapper for Termux
 # Configured for virtual users with full permissions
 
-include load_conf.sh
-include logger.sh
+source load_conf.sh
+source logger.sh
 
 function help_msg {
   cat << EOF

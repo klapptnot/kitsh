@@ -2,9 +2,9 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include barg.sh
-include rsum.sh
-include logger.sh
+source barg.sh
+source rsum.sh
+source logger.sh
 
 readonly BARG_SET_LABELS_NOTIFY_NOTIFICATION_HANDLER=(
   "Send desktop notifications using DBus"

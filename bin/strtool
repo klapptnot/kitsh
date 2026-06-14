@@ -2,7 +2,7 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include nucompletion-adapter.sh
+source nucompletion-adapter.sh
 
 BASHLIB_SCRIPTS="${BASHLIB_SCRIPTS:-$HOME/.config/bash/lib}"
 

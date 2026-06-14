@@ -5,8 +5,8 @@
 
 # SSH daemon management with wake lock and config support
 
-include logger.sh
-include load_conf.sh
+source logger.sh
+source load_conf.sh
 
 function help {
   cat << EOF

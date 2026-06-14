@@ -34,7 +34,7 @@ function main {
     exit
   fi
 
-  include rsum.sh
+  source rsum.sh
 
   # rsumc - copies to clipboard
   if [ "${linkname}" != 'rsumc' ]; then

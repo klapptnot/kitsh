@@ -1,17 +1,5 @@
 #!/usr/bin/bash
-export SOURCE_BASH_ANY=~/.local/lib/kitsh
 
-# A function to source library scripts from a predefined path.
-# This makes scripts available to both interactive and non-interactive shells.
-#
-# Usage: include <script_name> [arguments]
-#   <script_name>: The name of the script file to source.
-#   [arguments]: Any arguments to pass to the sourced script.
-function include {
-  if ! read -r < <(PATH="${SOURCE_BASH_ANY}" command -v "${1}" 2>/dev/null); then
-    printf 'include: %s not found\n' "${1}" >&2
-    exit 127
-  fi
-
-  source "${REPLY}" "${@:2}"
+function source {
+  builtin source "${@}" || exit "${?}"
 }

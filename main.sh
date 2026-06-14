@@ -6,7 +6,6 @@ set -euo pipefail
 read -r SCRIPT_PATH < <(realpath "${BASH_SOURCE[0]}")
 readonly SCRIPT_DIR="${SCRIPT_PATH%/*}"
 readonly LOCAL_BIN="${HOME}/.local/bin"
-readonly LOCAL_LIB="${HOME}/.local/lib/kitsh"
 
 function uninstall {
   cd "${SCRIPT_DIR}"
@@ -19,11 +18,11 @@ function uninstall {
   echo "Uninstalling bash tools using bstow..."
 
   if [[ -x "${SCRIPT_DIR}/bin/bstow" ]]; then
+    echo "Unlinking lib/ from ${LOCAL_BIN}..."
+    "${SCRIPT_DIR}/bin/bstow" -Dvf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_BIN}" -d "${SCRIPT_DIR}/lib"
+
     echo "Unlinking bin/ from ${LOCAL_BIN}..."
     "${SCRIPT_DIR}/bin/bstow" -Dvf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_BIN}" -d "${SCRIPT_DIR}/bin"
-
-    echo "Unlinking lib/ from ${LOCAL_LIB}..."
-    "${SCRIPT_DIR}/bin/bstow" -Dvf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_LIB}" -d "${SCRIPT_DIR}/lib"
   else
     echo "Warning: bstow not found, skipping symlink removal" >&2
   fi
@@ -46,9 +45,7 @@ function uninstall {
 function install {
   cd "${SCRIPT_DIR}"
 
-  echo "Installing bash tools using bstow..."
-
-  mkdir -p "${LOCAL_BIN}" "${LOCAL_LIB}"
+  mkdir -p "${LOCAL_BIN}"
 
   [ -v TERMUX_APP__PACKAGE_NAME ] || {
     echo "Downloading barg.sh to ${SCRIPT_DIR}/lib/..."
@@ -71,11 +68,12 @@ function install {
     exit 1
   fi
 
+  echo "Installing bash tools using bstow..."
   echo "Linking bin/ to ${LOCAL_BIN}..."
   "${SCRIPT_DIR}/bin/bstow" -Svf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_BIN}" -d "${SCRIPT_DIR}/bin"
 
-  echo "Linking lib/ to ${LOCAL_LIB}..."
-  "${SCRIPT_DIR}/bin/bstow" -Svf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_LIB}" -d "${SCRIPT_DIR}/lib"
+  echo "Linking lib/ to ${LOCAL_BIN}..."
+  "${SCRIPT_DIR}/bin/bstow" -Svf "${SCRIPT_DIR}/ignore.sh" -t "${LOCAL_BIN}" -d "${SCRIPT_DIR}/lib"
 
   [[ -e ~/.bash_env ]] || {
     echo "Linking .bash_env to ${HOME}..."

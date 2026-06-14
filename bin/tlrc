@@ -2,8 +2,8 @@
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-include logger.sh
-include barg.sh
+source logger.sh
+source barg.sh
 
 declare -ag lyric_lines=()
 declare -g mpv_pid=''

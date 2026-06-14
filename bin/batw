@@ -8,7 +8,7 @@
 #   batwh set <package> <true|false>
 #   batwh get <package>
 
-include sys-sh.sh
+source sys-sh.sh
 
 function main {
   local cmd="${1}"
