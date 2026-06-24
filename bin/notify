@@ -107,15 +107,15 @@ function send::dbus {
       "int32 ${NOTIFY_DBUS_EXPIRE_TIME:--1}"
   )
   if [ -n "${notif_id}" ]; then
-    log i "Notification send successfully (dbus, ID=${notif_id})"
+    log::info "Notification send successfully (dbus, ID=${notif_id})"
   else
-    log e "Failed to send notification (dbus)"
+    log::err "Failed to send notification (dbus)"
     return
   fi
 
   if ((${#actions_commands[@]} > 0)) || [ -n "${NOTIFY_BOTH_CLICK_ACTION}" ]; then
     dbus::notification_eventloop "${notif_id}" "${actions_commands[@]}" &> /dev/null &
-    log i "Notification event loop started for ID ${notif_id}"
+    log::info "Notification event loop started for ID ${notif_id}"
   fi
 }
 
@@ -165,7 +165,7 @@ function dbus::notification_eventloop {
 function send::ntfy {
   if [ -z "${NOTIFY_NTFY_TOPIC}" ]; then
     [ ! -e "${HOME}/.notify.conf" ] && {
-      log e "Config file not found and topic was not specified"
+      log::err "Config file not found and topic was not specified"
       exit
     }
     {
@@ -173,7 +173,7 @@ function send::ntfy {
     } < "${HOME}/.notify.conf"
   fi
   if [ -z "${NOTIFY_NTFY_TOPIC}" ]; then
-    log e "Topic for ntfy.sh is empty"
+    log::err "Topic for ntfy.sh is empty"
     return
   fi
 
@@ -227,16 +227,16 @@ function send::ntfy {
   fi
 
   if curl -sSL "${args_to_curl[@]}" "https://ntfy.sh/${NOTIFY_NTFY_TOPIC}"; then
-    log i "Notification send (ntfy.sh)"
+    log::info "Notification send (ntfy.sh)"
   else
-    log e "Notification not send (ntfy.sh)"
+    log::err "Notification not send (ntfy.sh)"
   fi
 }
 
 function pull::ntfy {
   if [ -z "${NOTIFY_NTFY_TOPIC}" ]; then
     [ ! -e "${HOME}/.notify.conf" ] && {
-      log e "Config file not found and topic was not specified"
+      log::err "Config file not found and topic was not specified"
       exit
     }
     {
@@ -244,7 +244,7 @@ function pull::ntfy {
     } < "${HOME}/.notify.conf"
   fi
   if [ -z "${NOTIFY_NTFY_TOPIC}" ]; then
-    log e "Topic for ntfy.sh is empty"
+    log::err "Topic for ntfy.sh is empty"
     return
   fi
 

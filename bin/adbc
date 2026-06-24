@@ -35,12 +35,12 @@ function try_cached_connection {
 
   local device
   read -r device < <(grep -oP "${host}:[0-9]{4,5}" "${cache_file}") || {
-    log debug "no cache for host ${host}"
+    log::debug "no cache for host ${host}"
     return 1
   }
 
   if adb connect "${device}" | grep -q 'failed'; then
-    log debug "cache stale for host ${host}"
+    log::debug "cache stale for host ${host}"
     return 1
   fi
 
@@ -54,23 +54,23 @@ function find_adb_port {
 
 function toggle_adb_wifi {
   ! command -v rish &> /dev/null && {
-    log error "rish not installed"
+    log::err "rish not installed"
     return 1
   }
   local curr
   if ! read -r curr < <(rish -c 'settings get global adb_wifi_enabled'); then
-    log error "Failed to read adb_wifi_enabled"
+    log::err "Failed to read adb_wifi_enabled"
     return 1
   fi
 
   ((curr == 1)) && return
 
   if ! rish -c 'settings put global adb_wifi_enabled 1'; then
-    log error "Failed to set adb_wifi_enabled to 1"
+    log::err "Failed to set adb_wifi_enabled to 1"
     return 1
   fi
 
-  log info "Set adb_wifi_enabled = 1"
+  log::info "Set adb_wifi_enabled = 1"
 }
 
 function main {
@@ -103,26 +103,26 @@ function main {
   read -r cache_dir < <(dirname "${cache_file}")
   mkdir -p "${cache_dir}" 2> /dev/null
 
-  log debug "Using host: ${host}"
-  log debug "Port range: ${port_range}"
-  log debug "Cache file: ${cache_file}"
+  log::debug "Using host: ${host}"
+  log::debug "Port range: ${port_range}"
+  log::debug "Cache file: ${cache_file}"
 
   wait "${pids[@]}"
 
   try_cached_connection "${host}" "${cache_file}" && exit 0
   touch "${cache_file}"
 
-  log debug 'Scanning ports...'
+  log::debug 'Scanning ports...'
   local port
   read -r port < <(find_adb_port "${host}" "${port_range}")
 
   if [[ -z "${port}" ]]; then
-    log error "No open ADB port detected on ${host}"
+    log::err "No open ADB port detected on ${host}"
     return 1
   fi
 
   local device="${host}:${port}"
-  log debug "Detected open port: ${port}"
+  log::debug "Detected open port: ${port}"
 
   if adb connect "${device}" &> /dev/null; then
     if grep -q "^${host}:" "${cache_file}"; then
@@ -134,7 +134,7 @@ function main {
     return
   fi
 
-  log error "Failed to connect to ${device}"
+  log::err "Failed to connect to ${device}"
   return 1
 }
 

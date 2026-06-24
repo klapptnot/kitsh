@@ -11,9 +11,10 @@ function wayshot::exit_msg {
 
 function wayshot::indicate_take {
   [ -z "${WAYSHOT_FLASH_COLOR}" ] && return
+  sleep 0.05
   slurp -b"${WAYSHOT_FLASH_COLOR}" &
   local pid=${!}
-  sleep 0.07
+  sleep 0.08
   kill -9 ${pid}
   jobs &> /dev/null
 }

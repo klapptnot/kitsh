@@ -1,4 +1,5 @@
 #!/usr/bin/bash
+
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -73,12 +74,12 @@ function google_search {
   declare -n request="${1}"
 
   if [ -z "${!request[*]}" ]; then
-    log e 'No request data available, request skipped'
+    log::err 'No request data available, request skipped'
     return 1
   fi
 
   if ((${#request[query]} < 1)); then
-    log e 'Query cannot be empty'
+    log::err 'Query cannot be empty'
     return 1
   fi
 
@@ -100,7 +101,7 @@ function google_search {
   local in_error=false
   while true; do
     if [ "${__attempts}" -ge "${request[tries]:-5}" ]; then
-      log e 'Stopped after %d failed attempts. Try again later' "${request[tries]:-5}"
+      log::err 'Stopped after %d failed attempts. Try again later' "${request[tries]:-5}"
       in_error=true
       break
     fi
@@ -148,31 +149,31 @@ function google_search {
     http_codes+=("${http_code}")
 
     if ((100 <= http_code && http_code <= 199)); then
-      log d 'HTTP %s -> Google informative... skipped. %d attempt.' "${http_code}" "${__attempts}"
+      log::debug 'HTTP %s -> Google informative... skipped. %d attempt.' "${http_code}" "${__attempts}"
       continue
     elif ((200 <= http_code && http_code <= 299)); then
-      log d 'HTTP %s -> Google successful. %d attempt.' "${http_code}" "${__attempts}"
+      log::debug 'HTTP %s -> Google successful. %d attempt.' "${http_code}" "${__attempts}"
       if [[ "${response_body}" == *'<script src="https://www.google.com/recaptcha/api.js" async defer></script>'* ]]; then
-        log e "HTTP %s -> Google Captcha. Change any of proxy, user-agent, cookies or try again later. %d attempt." "${http_code}" "${__attempts}"
+        log::err "HTTP %s -> Google Captcha. Change any of proxy, user-agent, cookies or try again later. %d attempt." "${http_code}" "${__attempts}"
         in_error=true
       fi
       break
     else
       if ((300 <= http_code && http_code <= 399)); then
-        log e 'HTTP %s -> Google redirection, try again changing user-agent. %d attempt.' "${http_code}" "${__attempts}"
+        log::err 'HTTP %s -> Google redirection, try again changing user-agent. %d attempt.' "${http_code}" "${__attempts}"
       elif ((400 <= http_code && http_code <= 499)); then
-        log e 'HTTP %s -> Client error, check the data and try again. %d attempt.' "${http_code}" "${__attempts}"
+        log::err 'HTTP %s -> Client error, check the data and try again. %d attempt.' "${http_code}" "${__attempts}"
       elif ((500 <= http_code && http_code <= 599)); then
-        log e 'HTTP %s -> Server error, try again later. %d attempt.' "${http_code}" "${__attempts}"
+        log::err 'HTTP %s -> Server error, try again later. %d attempt.' "${http_code}" "${__attempts}"
       else
-        log d 'HTTP %s -> Invalid code. %d attempt.' "${http_code}" "${__attempts}"
+        log::debug 'HTTP %s -> Invalid code. %d attempt.' "${http_code}" "${__attempts}"
         continue
       fi
       in_error=true
     fi
   done
 
-  log d 'Record of HTTP codes [%s]' "${http_codes[*]}"
+  log::debug 'Record of HTTP codes [%s]' "${http_codes[*]}"
   ${in_error} && return 1
 
   mapfile -t GOOGLE_RESULT_TITLE < <(grep -oP '(?<=<h3 class="LC20lb MBeuO DKV0Md" id=")[^<]*(?=<)' <<< "${response_body}" | sed 's/^.\{29\}//' | xml_unescape)
@@ -233,10 +234,10 @@ function main {
   @ C/command :strs => GOOSE_LAUNCH_WITH "Run command with each URL as params"
   @ j/json :flag => GOOSE_JSON_OUTPUT "Output results in JSON format"
     m/monochrome :flag => GOOSE_MONOCROME "Disable color output"
-  @ L/logger :int => GOOSE_LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
+  @ L/logger :int 4 => GOOSE_LOGGER_LEVEL "Logger verbosity level, 0 to disable logs"
 BARG
   barg::unload
-  log::setup "${GOOSE_LOGGER_LEVEL}"
+  LOGGER_EFFECTIVE_LEVEL="$((GOOSE_LOGGER_LEVEL % 6))"
 
   declare -A GOOSE_CONFIG
   load_conf GOOSE_CONFIG ~/.config/_/goose.conf
@@ -244,11 +245,11 @@ BARG
 
   if [[ -n "${GOOSE_PRESET}" || "${BARG_SUBCOMMAND}" == 'list' ]]; then
     if [ -z "${preset_file}" ]; then
-      log e 'No preset file defined. Add `preset_file: <path>` to ~/.config/_/goose.conf'
+      log::err 'No preset file defined. Add `preset_file: <path>` to ~/.config/_/goose.conf'
       return 1
     fi
     if [ ! -f "${preset_file}" ]; then
-      log e 'Failed to load presets: no such file %s' "${preset_file}"
+      log::err 'Failed to load presets: no such file %s' "${preset_file}"
       return 1
     fi
   fi
@@ -286,14 +287,14 @@ BARG
   local query="${GOOSE_QUERY[*]}"
 
   if ((GOOSE_RESULT_AMOUNT < 1)) || ((GOOSE_RESULT_AMOUNT > 10)); then
-    log i 'Invalid amount of results (%s), defaulting to 10' "${GOOSE_RESULT_AMOUNT}"
+    log::info 'Invalid amount of results (%s), defaulting to 10' "${GOOSE_RESULT_AMOUNT}"
     GOOSE_RESULT_AMOUNT=10
   fi
 
   if [ -n "${GOOSE_PRESET}" ]; then
     local preset_format='{{QUERY}}'
     if ! preset_format=$(grep -oP "(?<=${GOOSE_PRESET}: ).*" "${preset_file}"); then
-      log e 'Failed to get query from preset: no such preset "%s"' "${GOOSE_PRESET}"
+      log::err 'Failed to get query from preset: no such preset "%s"' "${GOOSE_PRESET}"
       return 1
     fi
     query="${preset_format//\{\{QUERY\}\}/${query}}"
@@ -308,7 +309,7 @@ BARG
     for i in {0..1}; do
       [ -n "${date_range[i]}" ] && {
         if ! is_valid_date "${date_range[i]}"; then
-          log e 'Invalid %s date format: %s. Use dd-mm-yyyy.' "${range_name[i]}" "${date_range[i]}"
+          log::err 'Invalid %s date format: %s. Use dd-mm-yyyy.' "${range_name[i]}" "${date_range[i]}"
           return 1
         fi
 
@@ -331,18 +332,18 @@ BARG
   grequest['g_start']="${GOOSE_RESULT_START}"
 
   if ! google_search grequest; then
-    log e 'Failed to search google T-T'
+    log::err 'Failed to search google T-T'
     return 1
   fi
 
   if ((GOOGLE_RESULTS == 0)); then
-    log i 'There are no results T-T'
+    log::info 'There are no results T-T'
     return 1
   fi
 
   if ((${#GOOSE_LAUNCH_WITH[@]} > 0)); then
     if ! command -v "${GOOSE_LAUNCH_WITH[0]}" &> /dev/null; then
-      log e 'Command %s not found or not executable' "${GOOSE_LAUNCH_WITH[0]}"
+      log::err 'Command %s not found or not executable' "${GOOSE_LAUNCH_WITH[0]}"
       return 1
     fi
 
@@ -356,15 +357,15 @@ BARG
 
     # index -1 and also index 0 is the command
     if ((placeholder_index < 1)); then
-      log i "Launching command..."
+      log::info "Launching command..."
       exec "${GOOSE_LAUNCH_WITH[@]}" "${GOOGLE_RESULT_URLS[@]}"
     fi
 
-    log i "Launching commands..."
+    log::info "Launching commands..."
     for link in "${GOOGLE_RESULT_URLS[@]}"; do
       cmd=("${GOOSE_LAUNCH_WITH[@]}")
       cmd[placeholder_index]="${link}"
-      log i 'Running: %s' "${cmd[*]}"
+      log::info 'Running: %s' "${cmd[*]}"
       "${cmd[@]}" > /dev/null &
     done
 

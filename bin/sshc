@@ -34,7 +34,7 @@ function enable_sshd {
   local startup_delay="${2}"
   local use_wake_lock="${3}"
 
-  log info "Enabling SSH daemon"
+  log::info "Enabling SSH daemon"
 
   [ "${use_wake_lock}" == 'true' ] && termux-wake-lock
   sshd && sleep "${startup_delay}"
@@ -44,12 +44,12 @@ function enable_sshd {
 
   if [[ -z "${sshd_pid}" ]]; then
     [ "${use_wake_lock}" == 'true' ] && termux-wake-unlock
-    log error "Failed to start sshd"
+    log::err "Failed to start sshd"
     return 1
   fi
 
   printf '%s\n' "${sshd_pid}" > "${pidfile}"
-  log info "SSH daemon enabled (PID: ${sshd_pid})"
+  log::info "SSH daemon enabled (PID: ${sshd_pid})"
   return 0
 }
 
@@ -60,15 +60,15 @@ function disable_sshd {
 
   read -r pid < "${pidfile}"
 
-  log info "Disabling SSH daemon (PID: ${pid})"
+  log::info "Disabling SSH daemon (PID: ${pid})"
 
   if kill "${pid}" 2> /dev/null; then
-    log info "SSH daemon disabled"
+    log::info "SSH daemon disabled"
     [ "${use_wake_lock}" == 'true' ] && termux-wake-unlock
     rm "${pidfile}" &> /dev/null
     return 0
   else
-    log error "Failed to kill sshd process (PID: ${pid})"
+    log::err "Failed to kill sshd process (PID: ${pid})"
     return 1
   fi
 }
@@ -120,8 +120,8 @@ function main {
 
   pidfile="${pidfile/#~/"${HOME}"}"
 
-  log debug "Using PID file: ${pidfile}"
-  log debug "Startup delay: ${startup_delay}s"
+  log::debug "Using PID file: ${pidfile}"
+  log::debug "Startup delay: ${startup_delay}s"
 
   if ${show_status_only}; then
     show_status "${pidfile}"
@@ -137,7 +137,7 @@ function main {
     if kill -0 "${pid}" &> /dev/null; then
       disable_sshd "${pidfile}" "${use_wake_lock}"
     else
-      log warn "Stale PID file detected, cleaning up"
+      log::warn "Stale PID file detected, cleaning up"
       rm "${pidfile}" &> /dev/null
       enable_sshd "${pidfile}" "${startup_delay}" "${use_wake_lock}"
     fi

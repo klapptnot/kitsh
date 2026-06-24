@@ -9,7 +9,7 @@ declare -ag lyric_lines=()
 declare -g mpv_pid=''
 
 function cleanup {
-  log i "Cleaning up..."
+  log::info "Cleaning up..."
   kill "${mpv_pid}" > /dev/null 2>&1
   unlink "${LYR_MPV_SOCKET:?}"
   kill 0 > /dev/null 2>&1
@@ -69,11 +69,11 @@ function record_timestamps {
     printf -v tmped '[%02d:%05.2f] %s' "${min}" "${sec_with_ms}" "${lyric_lines[i]}"
     timestamped[i]="${tmped}"
 
-    log i '%s' "${tmped}"
+    log::info '%s' "${tmped}"
     ((i++))
   done
 
-  log i 'All lyrics lines have been timestamped.'
+  log::info 'All lyrics lines have been timestamped.'
 
   printf '[00:00.00] \n' > "${output_file}"
   printf '%s\n' "${timestamped[@]}" >> "${output_file}"
@@ -97,28 +97,28 @@ BARG
   barg::unload
 
   if [[ ! -f "${LYR_INPUT_FILE}" || ! -f "${LYR_SONG_FILE}" ]]; then
-    log e "Missing input file or song file. Please check paths."
+    log::err "Missing input file or song file. Please check paths."
     exit 1
   fi
 
   mapfile -t lyric_lines < "${LYR_INPUT_FILE}"
 
   if [[ ${#lyric_lines[@]} -eq 0 ]]; then
-    log e "Input file is empty."
+    log::err "Input file is empty."
     exit 1
   fi
 
-  log i "Output will be saved to: %s" "${LYR_OUTPUT_FILE}"
+  log::info "Output will be saved to: %s" "${LYR_OUTPUT_FILE}"
   if [[ -s "${LYR_OUTPUT_FILE}" ]]; then
     if ! ${LYR_FILE_OVERWRITE}; then
-      log e "Output file exists and is not empty."
-      log i 'Use -f/--force to overwrite this file.'
+      log::err "Output file exists and is not empty."
+      log::info 'Use -f/--force to overwrite this file.'
       exit 1
     fi
-    log i 'Output file is not empty, will be overwritten.'
+    log::info 'Output file is not empty, will be overwritten.'
   fi
 
-  log i "Playing song: %s" "${LYR_SONG_FILE}"
+  log::info "Playing song: %s" "${LYR_SONG_FILE}"
 
   trap cleanup SIGINT
 
@@ -127,7 +127,7 @@ BARG
 
   while true; do
     mpv_socat '{ "command": ["seek", "-9999"] }' &> /dev/null \
-      && clear && log i 'Press o key to timestamp the next lyric line...'
+      && clear && log::info 'Press o key to timestamp the next lyric line...'
 
     record_timestamps "${LYR_OUTPUT_FILE}" && break
   done

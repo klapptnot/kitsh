@@ -41,7 +41,7 @@ function spawner {
 
   ${SPAWN_GO_FS_ROOT} && {
     cd / &>/dev/null || {
-      log e "Failed to change dir to root (/)" && return
+      log::err "Failed to change dir to root (/)" && return
     }
   }
 
@@ -77,22 +77,22 @@ function main {
   a/run-at :str "" => SPAWN_AT_TIME "Time to wait before spawning the process"
   g/as-gnome :flag => SPAWN_AS_GNOME "Launch the process as a GNOME session"
   u/uwsm :flag => SPAWN_WITH_UWSM "Spawn process using uwsm"
-  L/logger :int => SPAWN_LOGGER_LEVEL "Logging level"
+  L/logger :int 4 => SPAWN_LOGGER_LEVEL "Logging level"
 BARG
   if [[ -n "${BARG_ARGV_TABLE[SPAWN_WATCH_PATH]}" && ! -e "${SPAWN_WATCH_PATH}" ]]; then
     barg::exit_msg "Directory not found" "Arg for '-w/--watch' must be an existing file or folder"
   fi
   barg::unload
 
-  log::setup "${SPAWN_LOGGER_LEVEL}"
+  LOGGER_EFFECTIVE_LEVEL="$((SPAWN_LOGGER_LEVEL % 6))"
 
   if ${SPAWN_WITH_UWSM} && ! command -v uwsm &>/dev/null; then
-    log e 'The command uwsm is not an executable'
+    log::err 'The command uwsm is not an executable'
     return 1
   fi
 
   if ! command -v "${SPAWN_EXEC_LINE[0]}" &>/dev/null; then
-    log e 'The command %s is not an executable' "${SPAWN_EXEC_LINE[0]}"
+    log::err 'The command %s is not an executable' "${SPAWN_EXEC_LINE[0]}"
     return 1
   fi
 
@@ -104,13 +104,13 @@ BARG
   ((SPAWN_EXEC_LINE_COUNT > 1)) && printf -v cmd_line ' %q' "${SPAWN_EXEC_LINE[@]:1}"
   local cmd_line="${SPAWN_EXEC_LINE[0]}${cmd_line}"
 
-  log d 'Command to run: %s' "${cmd_line}"
+  log::debug 'Command to run: %s' "${cmd_line}"
 
   [ -n "${SPAWN_WATCH_PATH}" ] && {
     inotifywait --monitor --recursive --quiet -e modify,create,delete,move "${SPAWN_WATCH_PATH}" |
       while read -r directory events filename; do
         while read -t 0.1 -r _; do continue; done
-        log info 'Change detected!'
+        log::info 'Change detected!'
         setsid --fork spawn -r "${SPAWN_EXEC_LINE[@]}"
       done
     return
@@ -120,9 +120,9 @@ BARG
 
   if ((t_sec > 0)); then
     if ${SPAWN_RESTART}; then
-      log i 'Process will be restarted in %s' "${t_str[*]}"
+      log::info 'Process will be restarted in %s' "${t_str[*]}"
     else
-      log i 'Process will be spawned in %s' "${t_str[*]}"
+      log::info 'Process will be spawned in %s' "${t_str[*]}"
     fi
   fi
 

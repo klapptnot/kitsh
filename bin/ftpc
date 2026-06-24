@@ -50,7 +50,7 @@ function check_database {
   local db_path="${1}"
 
   if [[ ! -f "${db_path}" ]]; then
-    log error "User database not found: ${db_path}"
+    log::err "User database not found: ${db_path}"
     printf '%s\n' "Create users with:"
     printf '%s\n' "  pure-pw useradd <username> -u \$(id -u) -d <directory> -m"
     printf '\n'
@@ -59,15 +59,15 @@ function check_database {
     exit 1
   fi
 
-  log debug "Database found: ${db_path}"
+  log::debug "Database found: ${db_path}"
 }
 
 function stop_server {
   local pid_file="${1}"
 
   if [[ ! -f "${pid_file}" ]]; then
-    log warn "No PID file found, attempting pkill"
-    pkill -9 pure-ftpd 2> /dev/null && log info "Server stopped via pkill" || log warn "No process found"
+    log::warn "No PID file found, attempting pkill"
+    pkill -9 pure-ftpd 2> /dev/null && log::info "Server stopped via pkill" || log::warn "No process found"
     return 0
   fi
 
@@ -75,19 +75,19 @@ function stop_server {
   read -r old_pid < "${pid_file}" 2> /dev/null || true
 
   if [[ -n "${old_pid}" ]] && kill -0 "${old_pid}" 2> /dev/null; then
-    log info "Stopping FTP server (PID: ${old_pid})"
+    log::info "Stopping FTP server (PID: ${old_pid})"
     kill "${old_pid}"
     sleep 1
 
     if kill -0 "${old_pid}" 2> /dev/null; then
-      log warn "Process still running, force killing"
+      log::warn "Process still running, force killing"
       kill -9 "${old_pid}" 2> /dev/null || true
     fi
 
     rm -f "${pid_file}"
-    log info "Server stopped successfully"
+    log::info "Server stopped successfully"
   else
-    log warn "Stale PID file found, cleaning up"
+    log::warn "Stale PID file found, cleaning up"
     rm -f "${pid_file}"
     pkill -9 pure-ftpd 2> /dev/null || true
   fi
@@ -140,9 +140,9 @@ function start_server {
   local pid_dir="${pid_file%/*}"
   [[ ! -d "${pid_dir}" ]] && mkdir -p "${pid_dir}"
 
-  log info "Starting Pure-FTPd server on port ${port}"
-  log debug "Passive ports: ${passive_min}-${passive_max}"
-  log debug "Max clients: ${max_clients}, Max per IP: ${max_per_ip}"
+  log::info "Starting Pure-FTPd server on port ${port}"
+  log::debug "Passive ports: ${passive_min}-${passive_max}"
+  log::debug "Max clients: ${max_clients}, Max per IP: ${max_per_ip}"
 
   if ! pure-ftpd \
     -S 0.0.0.0,"${port}" \
@@ -160,11 +160,11 @@ function start_server {
     -g "${pid_file}" \
     -B \
     "${@}"; then
-    log error "Failed to start FTP server 😭"
+    log::err "Failed to start FTP server 😭"
     exit 1
   fi
 
-  log info "FTP server started successfully! ✨"
+  log::info "FTP server started successfully! ✨"
   printf '\n'
   printf '%s\n' "Server details:"
   printf '%s\n' "  • Port: ${port}"
@@ -225,7 +225,7 @@ function main {
     esac
   done
 
-  log debug "Action: ${action}"
+  log::debug "Action: ${action}"
 
   case "${action}" in
     start)
