@@ -1,0 +1,34 @@
+#!/usr/bin/bash
+source yaml.sh
+source barg.sh
+
+barg::parse "${@}" <<EOF
+#[always]
+meta {
+  argv_zero: 'yaml'
+  summary: 'simple yq-like utility using yaml.sh'
+  help_enabled: true
+  show_defaults: true
+  spare_args_var: 'POSITIONAL_ARGS'
+  spare_args_required: true
+}
+
+t/tab-size :int "2" => YM_PRINT_TAB_SIZE "Indentation per yaml level"
+r/raw :flag => YM_PRINT_RAW "If dot-path is a leaf, print raw value"
+m/no-color :flag true => YM_PRINT_COLORED "Print YAML document/node without colors"
+EOF
+
+[[ -z "${POSITIONAL_ARGS[0]}" ]] || [[ -z "${POSITIONAL_ARGS[1]}" && -t 0 ]] \
+  && yaml::die 'MissingArgument' "usage: ${0##*/} <dot_path> <file_path>"
+[[ -z "${POSITIONAL_ARGS[1]#-}" && ! -t 0 ]] && POSITIONAL_ARGS[1]="/dev/stdin"
+((${YM_PRINT_TAB_SIZE} < 1)) && yaml::die 'InvalidArgument' 'indentation size cannot be less than 1'
+
+yaml::load __ynml "${POSITIONAL_ARGS[1]}"
+yaml::get_leaf __this_leaf "${POSITIONAL_ARGS[0]}" __ynml
+
+if yaml::is_value "${__this_leaf}" && ${YM_PRINT_RAW}; then
+  printf '%s' "${__this_leaf:-null}"
+  exit 0
+fi
+
+yaml::dump "${__this_leaf:-null}" "${YM_PRINT_TAB_SIZE}" "${YM_PRINT_COLORED}"

@@ -23,8 +23,7 @@
 #   Uses `set -s extglob`
 #
 #   !! function yaml::die        - <name:string> <desc:string>
-#      function yaml::get_type   - <varname:string>
-#      function yaml::check_type - <varname:string> <expected_type:map|list>
+#      function yaml::is_value   - <varname:string>
 #   !! function yaml::get_leaf   - <varname_ref:string> <dot_path:string> <parent_node_ref:string>
 #   !! function yaml::ensure     - <expected_type:map|list> <dot_path:string> <parent_node_ref:string>
 #      function yaml::escape     - <string_varname:string>
@@ -34,6 +33,8 @@
 # ==============================================================================
 
 declare -Ag __yaml_typereg=()
+declare -rga yaml_type_name=('value' 'map' 'list' 'invalid')
+declare -rgA yaml_type_num=(['value']=0 ['map']=1 ['list']=2 ['invalid']=3)
 
 # !! <name:string> <desc:string>
 function yaml::die {
@@ -44,28 +45,11 @@ function yaml::die {
 }
 
 # <varname:string>
-function yaml::get_type {
+function yaml::is_value {
   local address="${1:-:3}"
-  [[ "${address}" == '__yn'* ]] || return 2
+  [[ "${address}" == '__yn'* ]] || return 0
   declare -p "${address}" &> /dev/null || return 3
-  return "${__yaml_typereg["${address}"]:-2}"
-}
-
-# <varname:string> <expected_type:map|list>
-function yaml::check_type {
-  local address="${1:?reference name required}"
-  local expected="${2:?type string required (map, list)}"
-  yaml::get_type "${address}"
-  local type="${?}"
-
-  local expected_enum
-  case "${expected}" in
-    map) expected_enum=0 ;;
-    list) expected_enum=1 ;;
-    *) return 1 ;;
-  esac
-
-  ((type == expected_enum))
+  return "${__yaml_typereg["${address}"]:-0}"
 }
 
 # !! <varname_ref:string> <dot_path:string> <parent_node_ref:string>
@@ -82,25 +66,19 @@ function yaml::get_leaf {
     return
   }
 
-  yaml::get_type "${_curr_node_name}"
+  yaml::is_value "${_curr_node_name}"
   local last_type="${?}"
-  ((last_type > 1)) && {
-    target_var_n=null
-    return
-  }
 
   for ((i = 0; i < len - 1; i++)); do
-    ((last_type == 1)) && [[ "${_nodes[i]}" != +([0-9]) ]] && yaml::die 'IndexError' 'cannot index array with string '"'${_nodes[i]}'"
+    ((last_type == 2)) && [[ "${_nodes[i]}" != +([0-9]) ]] && yaml::die 'IndexError' 'cannot index array with string '"'${_nodes[i]}'"
 
     local -n current_map="${_curr_node_name}"
     _curr_node_name="${current_map["${_nodes[i]}"]}"
 
-    yaml::get_type "${_curr_node_name:-:3}"
+    yaml::is_value "${_curr_node_name:-:3}" && yaml::die 'YamlError' "path segment '${_nodes[i]}' in '${_dot_path}' is a value"
     last_type="${?}"
-
-    ((last_type > 1)) && yaml::die 'YamlError' "path segment '${_nodes[i]}' in '${_dot_path}' is a value"
   done
-  ((last_type == 1)) && [[ "${_nodes[-1]}" != +([0-9]) ]] && yaml::die 'IndexError' 'cannot index array with string '"'${_nodes[-1]}'"
+  ((last_type == 2)) && [[ "${_nodes[-1]}" != +([0-9]) ]] && yaml::die 'IndexError' 'cannot index array with string '"'${_nodes[-1]}'"
 
   local -n current_map="${_curr_node_name}"
   target_var_n="${current_map["${_nodes[-1]}"]}"
@@ -115,9 +93,12 @@ function yaml::ensure {
   local target_val
   yaml::get_leaf target_val "${_dot_path}" "${_parent_node}"
 
-  [[ -z "${target_val}" ]] && yaml::die 'YamlError' "leaf '${_dot_path}' does not exist"
-  yaml::check_type "${target_val}" "${_yaml_type}" \
-    || yaml::die 'YamlError' "expected '${_dot_path}' to be a ${_yaml_type}, but it is invalid or missing"
+  [[ -z "${target_val}" ]] && yaml::die 'YamlError' "required section '${_dot_path}' is missing"
+  local expected_enum="${yaml_type_num["${_yaml_type}"]:?invalid type name}"
+
+  yaml::is_value "${target_val}"
+  local __ftype="${?}"
+  ((__ftype == expected_enum)) || yaml::die 'YamlError' "expected '${_dot_path}' to be a ${_yaml_type}, but it is a ${yaml_type_name[__ftype]}"
 }
 
 # <string_varname:string>
@@ -163,22 +144,21 @@ function yaml::dump (
     local curr_node="${1:?Node name required}"
     local indent="${2:-0}"
     local parent_type="${3:-0}"
-    local eff_indent=$((parent_type == 1 ? 0 : indent))
+    local eff_indent=$((parent_type == 2 ? 0 : indent))
 
-    yaml::get_type "${curr_node:-:3}"
+    yaml::is_value "${curr_node:-:3}"
     local curr_node_type="${?}"
     local v_color=""
 
-    if ((curr_node_type == 0)); then
+    if ((curr_node_type == 1)); then
       local -n curr_map="${curr_node}"
 
       for key in "${!curr_map[@]}"; do
         local val="${curr_map["${key}"]}"
 
-        yaml::get_type "${val:-:3}"
-        if ((${?} < 2)); then
+        if ! yaml::is_value "${val:-:3}"; then
           printf '%*s%b%s%b:\n' "${eff_indent}" '' "${c_key}" "${key}" "${c_reset}"
-          __yaml_dump_recurse "${val}" $((indent + indent_size)) 0
+          __yaml_dump_recurse "${val}" $((indent + indent_size)) 1
         else
           yaml::escape val
           case "${?}" in
@@ -192,16 +172,15 @@ function yaml::dump (
         eff_indent="${indent}"
       done
 
-    elif ((curr_node_type == 1)); then
+    elif ((curr_node_type == 2)); then
       local -n curr_list="${curr_node}"
 
       for idx in "${!curr_list[@]}"; do
         local val="${curr_list[idx]}"
 
-        yaml::get_type "${val:-:3}"
-        if ((${?} < 2)); then
+        if ! yaml::is_value "${val:-:3}"; then
           printf '%*s- ' "${eff_indent}" ''
-          __yaml_dump_recurse "${val}" $((indent + indent_size)) 1
+          __yaml_dump_recurse "${val}" $((indent + indent_size)) 2
         else
           yaml::escape val
           case "${?}" in
@@ -249,10 +228,10 @@ function yaml::load {
 
   if [[ "${lines[ln]##*(\ )}" == -*(\ *) ]]; then
     declare -ag "${_root_name}=()"
-    __yaml_typereg["${_root_name}"]=1
+    __yaml_typereg["${_root_name}"]=2
   else
     declare -Ag "${_root_name}=()"
-    __yaml_typereg["${_root_name}"]=0
+    __yaml_typereg["${_root_name}"]=1
   fi
 
   local -a node_stack=("${_root_name}")
@@ -312,18 +291,19 @@ function yaml::load {
     local -n __node_ref="${node_stack[-1]}"
     local __new_node="${_root_name}_$((++__yaml_node_idx))"
 
-    case "${1:-0}" in
-      1) declare -ag "${__new_node}=()" ;;
-      *) declare -Ag "${__new_node}=()" ;;
+    case "${1:-1}" in
+      1) declare -Ag "${__new_node}=()" ;;
+      2) declare -ag "${__new_node}=()" ;;
     esac
 
-    if yaml::get_type "${node_stack[-1]:?:3}"; then
+    yaml::is_value "${node_stack[-1]:?:3}"
+    if ((${?} == 1)); then
       __node_ref["${waits_value:?}"]="${__new_node}"
     else
       __node_ref+=("${__new_node}")
     fi
 
-    __yaml_typereg["${__new_node}"]="${1:-0}"
+    __yaml_typereg["${__new_node}"]="${1:-1}"
     node_stack+=("${__new_node}")
   }
 
@@ -336,7 +316,8 @@ function yaml::load {
     __val="${__val@E}"
     [[ "${val}" == '__yn'* ]] && __yaml_die "${curr_indent}" 'ValueError' 'Values starting with "__yn" are forbidden'
 
-    if yaml::get_type "${node_stack[-1]:?:3}"; then
+    yaml::is_value "${node_stack[-1]:?:3}"
+    if ((${?} == 1)); then
       read -r __key <<< "${2:?missing key}"
       [[ -v "__node_ref["${__key:?a cannot be just spaces}"]" ]] \
         && __yaml_die "${curr_indent}" 'YamlError' 'key is already defined'
@@ -493,9 +474,9 @@ function yaml::load {
           ((curr_indent < indent_size * level)) && waits_value=''
           __yaml_die "${expected}" 'IndentationError' "${waits_value:+list may not be indented as its parent, }expected ${expected}, got ${curr_indent}"
         fi
-        __yaml_push_value "" "${waits_value}"
+        __yaml_push_value "null" "${waits_value}"
       else
-        __yaml_push_node $((__list_count ? 1 : 0))
+        __yaml_push_node $((__list_count ? 2 : 1))
       fi
       waits_value=''
     fi
@@ -512,8 +493,8 @@ function yaml::load {
     last_level="${level}"
 
     if ((__list_count--)); then
-      while ((__list_count-- > 0)); do __yaml_push_node 1; done
-      [[ -n "${key}" ]] && __yaml_push_node
+      while ((__list_count-- > 0)); do __yaml_push_node 2; done
+      [[ -n "${key}" ]] && __yaml_push_node 1
     elif [[ -z "${key}" ]]; then
       __yaml_die "${curr_indent}" 'MissingKey' "stray value, missing a key"
     elif [[ -z "${val}" ]]; then

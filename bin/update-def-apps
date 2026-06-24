@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+set -u
+source yaml.sh
+
+readonly XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+readonly XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+readonly YAML_FILE_PATH="${XDG_CONFIG_HOME}/_/def-apps.yaml"
+
+read -r OUT_FILE < <(realpath -LE "${XDG_CONFIG_HOME}/mimeapps.list") || {
+  printf 'Config folder does not exist\n' >&2
+  exit 1
+}
+readonly OUT_FILE
+
+[[ -f "${YAML_FILE_PATH}" ]] || {
+  printf 'Config file does not exist\n' >&2
+  exit 1
+}
+
+readonly AWK_SCRIPT='
+BEGIN {
+    prefix=mimetype "="
+    indefault=0
+    added=0
+    blanks=0
+    found=0
+}
+{
+    suppress=0
+    if (index($0, "[Default Applications]") == 1) {
+        indefault=1
+        found=1
+    } else if (index($0, "[") == 1) {
+        if (!added && indefault) {
+            print prefix application
+            added=1
+        }
+        indefault=0
+    } else if ($0 == "") {
+        suppress=1
+        blanks++
+    } else if (indefault && !added && index($0, prefix) == 1) {
+            $0=prefix application
+            added=1
+    }
+    if (!suppress) {
+        while (blanks > 0) {
+            print ""
+            blanks--
+        }
+        print $0
+    }
+}
+END {
+    if (!added) {
+        if (!found) {
+            print ""
+            print "[Default Applications]"
+        }
+        print prefix application
+    }
+    while (blanks > 0) {
+        print ""
+        blanks--
+    }
+}
+'
+
+# taken from xdg-mime, and modified for bash (unused)
+function make_default_generic {
+  # $1 is vendor-name.desktop
+  # $2 is mime/type
+  # Add $2=$1 to XDG_CONFIG_HOME/mimeapps.list
+
+  printf '%-24s -> %s\n' "${desktop_file}" "${mime}"
+  awk -v mimetype="${2}" -v application="${1}" \
+    "${AWK_SCRIPT}" "${OUT_FILE}" > "${OUT_FILE}.new" \
+    && mv "${OUT_FILE}.new" "${OUT_FILE}"
+}
+
+function get-desktop-file-path {
+  local filename="${1}"
+  local search_paths=(
+    "${XDG_DATA_HOME}/applications"
+    "/usr/local/share/applications"
+    "/usr/share/applications"
+    "/var/lib/flatpak/exports/share/applications"
+  )
+
+  for path in "${search_paths[@]}"; do
+    if [[ -f "${path}/${filename}" ]]; then
+      echo "${path}/${filename}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+function main {
+  yaml::load __ynml "${YAML_FILE_PATH}"
+
+  declare -A new_associations
+  declare -A processed_apps
+
+  for app in "${!__ynml[@]}"; do
+    [[ -n "${processed_apps["${app}"]:-}" ]] && continue
+    processed_apps["${app}"]=1
+
+    local app_yn="${__ynml["${app}"]}"
+    local desktop_file="${app}.desktop"
+    local path
+    if ! path="$(get-desktop-file-path "${desktop_file}")"; then
+      echo "not found: ${app}" >&2
+      continue
+    fi
+
+    yaml::is_value "${app_yn}"
+    local app_yn_type="${?}"
+    ((app_yn_type == 1)) && yaml::die 'ValueError' "Expected a string or list, got a map for ${app}"
+
+    if ((app_yn_type == 1)); then
+      local -n mime_list="${app_yn}"
+      local mime_list_len="${#mime_list[@]}"
+      local -i i=-1
+      while ((++i < mime_list_len)); do
+        local m_type="${mime_list[i]}"
+        yaml::is_value "${m_type}" #|| yaml::die 'ValueError' "Expected string, got a node in ${app}[${i}]"
+        case "${?}" in
+          0) : ;;
+          1) yaml::die 'ValueError' "Expected string, got a LIST in ${app}[${i}]" ;;
+          2) yaml::die 'ValueError' "Expected string, got a MAP in ${app}[${i}]" ;;
+          *) yaml::die 'ValueError' "Expected string, got an INVALID node in ${app}[${i}]" ;;
+        esac
+        new_associations["${m_type}"]="${desktop_file}"
+        printf '%-24s -> %s\n' "${desktop_file}" "${m_type}"
+      done
+      continue
+    fi
+
+    # has to be scalar/string
+    if [[ "${app_yn}" == "all" ]]; then
+      local -a mimes
+      IFS=';' read -ra mimes < <(grep -oP "(?<=^MimeType=).*" "${path}")
+
+      for m_type in "${mimes[@]}"; do
+        if [[ -n "${m_type}" ]]; then
+          new_associations["${m_type}"]="${desktop_file}"
+        fi
+      done
+      printf '%-24s -> (All internal MIME types registered)\n' "${desktop_file}"
+      continue
+    fi
+
+    local single_mime="${__ynml["${app}"]}"
+    new_associations["${single_mime}"]="${desktop_file}"
+    printf '%-24s -> %s\n' "${desktop_file}" "${single_mime}"
+  done
+
+  printf '\nWriting changes cleanly to %s...\n' "${OUT_FILE}"
+  {
+    printf '[Default Applications]\n'
+    for m_type in "${!new_associations[@]}"; do
+      printf '%s=%s\n' "${m_type}" "${new_associations["${m_type}"]}"
+    done
+  } > "${OUT_FILE}"
+}
+
+main "${@}"
