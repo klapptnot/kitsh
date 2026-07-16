@@ -11,7 +11,7 @@
 #   by eliminating subshell forks (`$(...)`), external utilities (jq/yq/sed/awk).
 #   Complex nesting is preserved, allowing fast traversal via namerefs (`declare -n`).
 #
-#   - Excludes Flow-style syntax, node anchors (`&`), aliases (`*`), and merges (`<<`)
+#   - Excludes Flow-style syntax, multidocument, and tags !!tags
 #   - Fits any indent size, but requires uniform/consistent indentation
 #   - All scalars as strings, matching shell execution context
 #   - No value can start with `__yn`, and root has to start with it
@@ -23,7 +23,8 @@
 #   Uses `set -s extglob`
 #
 #   !! function yaml::die        - <name:string> <desc:string>
-#      function yaml::is_value   - <varname:string>
+#      function yaml::type       - <varname:string>
+#      function yaml::is         - <type:string> <varname:string>
 #   !! function yaml::get_leaf   - <varname_ref:string> <dot_path:string> <parent_node_ref:string>
 #   !! function yaml::ensure     - <expected_type:map|list> <dot_path:string> <parent_node_ref:string>
 #      function yaml::escape     - <string_varname:string>
@@ -32,9 +33,9 @@
 #
 # ==============================================================================
 
+declare -rga yaml_type_name=('value' 'map' 'list' 'null' 'invalid')
+declare -rgA yaml_type_num=(['value']=0 ['map']=1 ['list']=2 ['null']=3 ['invalid']=4)
 declare -Ag __yaml_typereg=()
-declare -rga yaml_type_name=('value' 'map' 'list' 'invalid')
-declare -rgA yaml_type_num=(['value']=0 ['map']=1 ['list']=2 ['invalid']=3)
 
 # !! <name:string> <desc:string>
 function yaml::die {
@@ -45,11 +46,24 @@ function yaml::die {
 }
 
 # <varname:string>
-function yaml::is_value {
-  local address="${1:-:3}"
-  [[ "${address}" == '__yn'* ]] || return 0
-  declare -p "${address}" &> /dev/null || return 3
-  return "${__yaml_typereg["${address}"]:-0}"
+function yaml::type {
+  local __v_addr="${1:-:3}"
+  [[ "${__v_addr}" == 'null' ]] && return 3
+  [[ "${__v_addr}" == '__yn'* ]] || return 0
+  declare -p "${__v_addr}" &> /dev/null || return 4
+  return "${__yaml_typereg["${__v_addr}"]:-0}"
+}
+
+# <varname:string>
+function yaml::is {
+  local __exp_type="${yaml_type_num["${1:-value}"]:?invalid type name}"
+  local __v_addr="${2}"
+  [[ "${__v_addr}" == 'null' ]] && return 3
+  [[ "${__v_addr}" == '__yn'* ]] || return 0
+  declare -p "${__v_addr}" &> /dev/null || return 4
+  local __actual_t="${__yaml_typereg["${__v_addr}"]:-0}"
+
+  ((__actual_t == __exp_type))
 }
 
 # !! <varname_ref:string> <dot_path:string> <parent_node_ref:string>
@@ -66,7 +80,7 @@ function yaml::get_leaf {
     return
   }
 
-  yaml::is_value "${_curr_node_name}"
+  yaml::type "${_curr_node_name}"
   local last_type="${?}"
 
   for ((i = 0; i < len - 1; i++)); do
@@ -75,7 +89,7 @@ function yaml::get_leaf {
     local -n current_map="${_curr_node_name}"
     _curr_node_name="${current_map["${_nodes[i]}"]}"
 
-    yaml::is_value "${_curr_node_name:-:3}" && yaml::die 'YamlError' "path segment '${_nodes[i]}' in '${_dot_path}' is a value"
+    yaml::type "${_curr_node_name:-:3}" && yaml::die 'YamlError' "path segment '${_nodes[i]}' in '${_dot_path}' is a value"
     last_type="${?}"
   done
   ((last_type == 2)) && [[ "${_nodes[-1]}" != +([0-9]) ]] && yaml::die 'IndexError' 'cannot index array with string '"'${_nodes[-1]}'"
@@ -96,7 +110,7 @@ function yaml::ensure {
   [[ -z "${target_val}" ]] && yaml::die 'YamlError' "required section '${_dot_path}' is missing"
   local expected_enum="${yaml_type_num["${_yaml_type}"]:?invalid type name}"
 
-  yaml::is_value "${target_val}"
+  yaml::type "${target_val}"
   local __ftype="${?}"
   ((__ftype == expected_enum)) || yaml::die 'YamlError' "expected '${_dot_path}' to be a ${_yaml_type}, but it is a ${yaml_type_name[__ftype]}"
 }
@@ -141,12 +155,12 @@ function yaml::dump (
   fi
 
   function __yaml_dump_recurse {
-    local curr_node="${1:?Node name required}"
+    local curr_node="${1}"
     local indent="${2:-0}"
     local parent_type="${3:-0}"
     local eff_indent=$((parent_type == 2 ? 0 : indent))
 
-    yaml::is_value "${curr_node:-:3}"
+    yaml::type "${curr_node}"
     local curr_node_type="${?}"
     local v_color=""
 
@@ -156,7 +170,7 @@ function yaml::dump (
       for key in "${!curr_map[@]}"; do
         local val="${curr_map["${key}"]}"
 
-        if ! yaml::is_value "${val:-:3}"; then
+        if ! yaml::is value "${val}"; then
           printf '%*s%b%s%b:\n' "${eff_indent}" '' "${c_key}" "${key}" "${c_reset}"
           __yaml_dump_recurse "${val}" $((indent + indent_size)) 1
         else
@@ -178,7 +192,7 @@ function yaml::dump (
       for idx in "${!curr_list[@]}"; do
         local val="${curr_list[idx]}"
 
-        if ! yaml::is_value "${val:-:3}"; then
+        if ! yaml::is value "${val}"; then
           printf '%*s- ' "${eff_indent}" ''
           __yaml_dump_recurse "${val}" $((indent + indent_size)) 2
         else
@@ -285,6 +299,10 @@ function yaml::load {
     exec false
   }
 
+  local -A __aliased_nodes=()
+  local __m_anchor=''
+  local __val_split=''
+
   declare -i __yaml_node_idx=0
   function __yaml_push_node {
     ((level++))
@@ -296,8 +314,8 @@ function yaml::load {
       2) declare -ag "${__new_node}=()" ;;
     esac
 
-    yaml::is_value "${node_stack[-1]:?:3}"
-    if ((${?} == 1)); then
+    local __0type="${__yaml_typereg[${node_stack[-1]}]}"
+    if ((__0type == yaml_type_num[map])); then
       __node_ref["${waits_value:?}"]="${__new_node}"
     else
       __node_ref+=("${__new_node}")
@@ -305,23 +323,49 @@ function yaml::load {
 
     __yaml_typereg["${__new_node}"]="${1:-1}"
     node_stack+=("${__new_node}")
+
+    if [[ -n "${__m_anchor}" ]]; then
+      __aliased_nodes["${__m_anchor}"]="${__new_node}"
+      __m_anchor=''
+    fi
   }
 
   function __yaml_push_value {
     local -n __node_ref="${node_stack[-1]}"
     local __val="${1}"
-    case "${__val}" in
-      "'"*"'" | '"'*'"') __val="${__val:1:-1}" ;;
-    esac
-    __val="${__val@E}"
-    [[ "${val}" == '__yn'* ]] && __yaml_die "${curr_indent}" 'ValueError' 'Values starting with "__yn" are forbidden'
 
-    yaml::is_value "${node_stack[-1]:?:3}"
-    if ((${?} == 1)); then
+    if [[ -n "${__m_anchor}" && -z "${__val}" ]]; then
+      __val="${__aliased_nodes["${__m_anchor}"]}"
+      __m_anchor=''
+    else
+      case "${__val}" in
+        "'"*"'" | '"'*'"') __val="${__val:1:-1}" ;;
+      esac
+      __val="${__val@E}"
+      [[ "${__val}" == '__yn'* ]] && __yaml_die "${curr_indent}" \
+        'ValueError' 'Values starting with "__yn" are forbidden'
+      if [[ -n "${__m_anchor}" ]]; then
+        __aliased_nodes["${__m_anchor}"]="${__val}"
+        __m_anchor=''
+      fi
+    fi
+
+    local __0type="${__yaml_typereg[${node_stack[-1]}]}"
+
+    if ((__0type == yaml_type_num[map])); then
+      local __key
       read -r __key <<< "${2:?missing key}"
-      [[ -v "__node_ref["${__key:?a cannot be just spaces}"]" ]] \
-        && __yaml_die "${curr_indent}" 'YamlError' 'key is already defined'
-      __node_ref["${__key}"]="${__val}"
+      if [[ "${__key:?a cannot be just spaces}" != '<<' ]]; then
+        __node_ref["${__key}"]="${__val}"
+        return
+      fi
+      __0type="${__yaml_typereg[${__val}]}"
+      ((__0type != yaml_type_num[map])) \
+        && __yaml_die "${curr_indent}" 'YamlError' '<< merging can only be anchored to a map'
+      local -n __an="${__val}"
+      for k in "${!__an[@]}"; do
+        __node_ref["${k}"]="${__an["${k}"]}"
+      done
     else
       __node_ref+=("${__val}")
     fi
@@ -483,9 +527,33 @@ function yaml::load {
 
     while ((curr_indent < indent_size * level)); do
       ((level--))
-      readonly "${node_stack[-1]}"
       unset 'node_stack[-1]'
     done
+
+    __val_split=''
+    __m_anchor=''
+    read -r __m_anchor __val_split <<< "${val}"
+    if [[ "${__m_anchor}" == '&'?* ]]; then
+      __m_anchor="${__m_anchor:1}"
+      [[ -n "${__aliased_nodes["${__m_anchor}"]}" ]] && __yaml_die "${curr_indent}" 'AnchorExists' "anchor name '${__m_anchor}' is already defined"
+      val="${__val_split}"
+      # [[ -n "${val}" ]] && {
+      #   __aliased_nodes["${__m_anchor}"]="${val}"
+      #   __m_anchor=''
+      # }
+    elif [[ "${__m_anchor}" == '*'?* ]]; then
+      __m_anchor="${__m_anchor:1}"
+      [[ -n "${__val_split}" ]] && __yaml_die "${curr_indent}" 'InvalidToken' 'unexpected data after alias'
+      [[ -z "${__aliased_nodes["${__m_anchor}"]}" ]] && __yaml_die "${curr_indent}" \
+        'MissingAnchor' "'${__m_anchor}' is not defined"
+      [[ " ${node_stack[*]} " == *" ${__aliased_nodes["${__m_anchor}"]} "* ]] && __yaml_die "${curr_indent}" \
+        'YamlError' "ref to '${__m_anchor}' is a circular reference"
+      __yaml_push_value '' "${key}"
+      continue
+    else
+      __m_anchor=''
+      __val_split=''
+    fi
 
     ((expected = indent_size * level))
     ((curr_indent != expected)) && __yaml_die "${expected}" 'IndentationError' "expected ${expected}, got ${curr_indent}"
@@ -529,7 +597,6 @@ function yaml::load {
     __yaml_push_value "${val}" "${mln_key}"
   }
 
-  readonly "${node_stack[@]}"
-  unset -f __yaml_die __yaml_parse_line __yaml_push_node __yaml_push_value __join_to_val_by
+  unset -f __yaml_die __yaml_parse_line __yaml_push_node __yaml_push_value __join_to_val_by __aliased_nodes
   return 0
 }

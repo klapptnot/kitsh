@@ -115,17 +115,17 @@ function main {
       continue
     fi
 
-    yaml::is_value "${app_yn}"
+    yaml::type "${app_yn}"
     local app_yn_type="${?}"
-    ((app_yn_type == 1)) && yaml::die 'ValueError' "Expected a string or list, got a map for ${app}"
+    ((app_yn_type == yaml_type_num[map])) && yaml::die 'ValueError' "Expected a string or list, got a map for ${app}"
 
-    if ((app_yn_type == 1)); then
+    if ((app_yn_type == yaml_type_num[list])); then
       local -n mime_list="${app_yn}"
       local mime_list_len="${#mime_list[@]}"
       local -i i=-1
       while ((++i < mime_list_len)); do
         local m_type="${mime_list[i]}"
-        yaml::is_value "${m_type}" #|| yaml::die 'ValueError' "Expected string, got a node in ${app}[${i}]"
+        yaml::type "${m_type}" #|| yaml::die 'ValueError' "Expected string, got a node in ${app}[${i}]"
         case "${?}" in
           0) : ;;
           1) yaml::die 'ValueError' "Expected string, got a LIST in ${app}[${i}]" ;;
