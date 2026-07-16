@@ -115,23 +115,20 @@ function main {
       continue
     fi
 
-    yaml::type "${app_yn}"
-    local app_yn_type="${?}"
-    ((app_yn_type == yaml_type_num[map])) && yaml::die 'ValueError' "Expected a string or list, got a map for ${app}"
+    local app_yn_type
+    yaml::type app_yn_type "${app_yn}"
+    ((app_yn_type == YAML_MAP)) && yaml::die 'ValueError' "Expected a string or list, got a map for ${app}"
 
-    if ((app_yn_type == yaml_type_num[list])); then
+    if ((app_yn_type == YAML_LIST)); then
       local -n mime_list="${app_yn}"
       local mime_list_len="${#mime_list[@]}"
       local -i i=-1
       while ((++i < mime_list_len)); do
         local m_type="${mime_list[i]}"
-        yaml::type "${m_type}" #|| yaml::die 'ValueError' "Expected string, got a node in ${app}[${i}]"
-        case "${?}" in
-          0) : ;;
-          1) yaml::die 'ValueError' "Expected string, got a LIST in ${app}[${i}]" ;;
-          2) yaml::die 'ValueError' "Expected string, got a MAP in ${app}[${i}]" ;;
-          *) yaml::die 'ValueError' "Expected string, got an INVALID node in ${app}[${i}]" ;;
-        esac
+        yaml::type app_yn_type "${m_type}"
+        if ((app_yn_type != YAML_STRING)); then
+          yaml::die 'ValueError' "Expected string, got a ${YAML_TYPE_STR[${app_yn_type}]} in ${app}[${i}]"
+        fi
         new_associations["${m_type}"]="${desktop_file}"
         printf '%-24s -> %s\n' "${desktop_file}" "${m_type}"
       done

@@ -87,6 +87,7 @@ function wayshot::shot_window {
 }
 
 function main {
+  local USER_PICS_DIR=''
   read -r USER_PICS_DIR < <(xdg-user-dir PICTURES)
 
   local _epilog_lines=(

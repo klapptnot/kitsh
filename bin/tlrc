@@ -9,25 +9,28 @@ declare -ag lyric_lines=()
 declare -g mpv_pid=''
 
 function cleanup {
-  log::info "Cleaning up..."
+  printf '\x1b[?25h\x1b[0H\x1b[3J'
   kill "${mpv_pid}" > /dev/null 2>&1
   unlink "${LYR_MPV_SOCKET:?}"
   kill 0 > /dev/null 2>&1
 }
 
 function mpv_socat {
-  # shellcheck disable=SC2059
   printf "${1}\n" "${@:1}" | socat - "${LYR_MPV_SOCKET}"
 }
 
 function record_timestamps {
   local output_file="${1}"
-  local i=0
 
-  local last_timestamp=0
+  local last_timestamp='0.0'
   local timestamps=()
   local timestamped=()
-  while read -rsN 1 c && ((i <= ${#lyric_lines[@]})); do
+  local sec_with_ms elapsed_sec elapsed_min
+  for ll in "${lyric_lines[@]}" '[:end of lyrics:]' '[:finish:]'; do
+    printf '\x1b[38;5;242m[00:00.00] %s\x1b[0m\n' "${ll}"
+  done
+  printf '\x1b[%dA\x1b[0G\x1b[?25l' "$((2 + ${#lyric_lines[@]}))"
+  while read -rsN 1 c && ((${#timestamps[@]} <= ${#lyric_lines[@]})); do
     case "${c}" in
       'o') ;; # fall-through (add timed line)
       'p')
@@ -35,48 +38,37 @@ function record_timestamps {
         continue
         ;;
       'i')
-        timestamps[i]='0.0'
-        ((i > 0)) && {
-          printf '\x1b[1A\x1b[0G\x1b[0K'
-          ((i--))
-          last_timestamp="${timestamps[(i - 1)]:-0.0}"
-          true
-        } || last_timestamp='0.0'
-        mpv_socat '{"command": ["set_property", "time-pos", %d]}' "${last_timestamp}" &> /dev/null
+        if ((${#timestamps[@]} > 0)); then
+          unset 'timestamps[-1]' 'timestamped[-1]'
+          printf '\x1b[1A\x1b[0G\x1b[0K\x1b[38;5;242m[00:00.00] %s\x1b[0m\x1b[0G' \
+            "${lyric_lines[${#timestamps[@]}]}"
+          ((${#timestamps[@]} > 0)) && last_timestamp="${timestamps[-1]:-0.0}"
+        fi
+        mpv_socat '{"command": ["set_property", "time-pos", %d]}' "${last_timestamp:=0.0}" &> /dev/null
         continue
         ;;
       'r') return 1 ;;
       *) continue ;;
     esac
 
-    local elapsed_sec
-    read -r elapsed_sec < <(
-      mpv_socat '{"command": ["get_property", "time-pos"]}' \
-        | jq -r '.data'
-    )
-
-    # Handle null/error cases
+    read -r elapsed_sec < <(mpv_socat '{"command": ["get_property", "time-pos"]}' | jq -r '.data')
     [[ "${elapsed_sec}" == "null" || -z "${elapsed_sec}" ]] && elapsed_sec="0.00"
 
-    timestamps[i]="${elapsed_sec}"
-
-    local sec_with_ms
     read -r sec_with_ms < <(awk "BEGIN {printf \"%.2f\", ${elapsed_sec} % 60}")
-
     elapsed_sec="${elapsed_sec%%.*}"
-    local min=$((elapsed_sec / 60))
+    elapsed_min=$((elapsed_sec / 60))
 
-    printf -v tmped '[%02d:%05.2f] %s' "${min}" "${sec_with_ms}" "${lyric_lines[i]}"
-    timestamped[i]="${tmped}"
-
-    log::info '%s' "${tmped}"
-    ((i++))
+    printf -v tmped '[%02d:%05.2f] %s' "${elapsed_min}" "${sec_with_ms}" "${lyric_lines[${#timestamps[@]}]}"
+    timestamps+=("${elapsed_sec}")
+    timestamped+=("${tmped}")
+    printf '\x1b[0G\x1b[0K%s\n' "${tmped}"
+    printf '\x1b[38;5;242m[00:00.00] %s\x1b[0m\x1b[0G' "${lyric_lines[${#timestamps[@]}]}"
   done
 
   log::info 'All lyrics lines have been timestamped.'
 
   printf '[00:00.00] \n' > "${output_file}"
-  printf '%s\n' "${timestamped[@]}" >> "${output_file}"
+  printf '%s\n' "${timestamped[@]:1}" >> "${output_file}"
 }
 
 function main {
@@ -101,7 +93,8 @@ BARG
     exit 1
   fi
 
-  mapfile -t lyric_lines < "${LYR_INPUT_FILE}"
+  local lyric_lines=('[:marker:]')
+  mapfile -tO1 lyric_lines < "${LYR_INPUT_FILE}"
 
   if [[ ${#lyric_lines[@]} -eq 0 ]]; then
     log::err "Input file is empty."
@@ -127,7 +120,8 @@ BARG
 
   while true; do
     mpv_socat '{ "command": ["seek", "-9999"] }' &> /dev/null \
-      && clear && log::info 'Press o key to timestamp the next lyric line...'
+      && printf '\x1b[0H\x1b[3J' \
+      && log::info 'Press o key to timestamp the next lyric line...'
 
     record_timestamps "${LYR_OUTPUT_FILE}" && break
   done

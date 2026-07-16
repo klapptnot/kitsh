@@ -25,8 +25,9 @@ EOF
 
 yaml::load __ynml "${POSITIONAL_ARGS[1]}"
 yaml::get_leaf __this_leaf "${POSITIONAL_ARGS[0]}" __ynml
+yaml::type __this_leaf_type "${__this_leaf}"
 
-if yaml::is value "${__this_leaf}" && ${YM_PRINT_RAW}; then
+if ((__this_leaf_type > YAML_LIST)) && ${YM_PRINT_RAW}; then
   printf '%s' "${__this_leaf:-null}"
   exit 0
 fi
