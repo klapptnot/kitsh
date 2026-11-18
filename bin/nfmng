@@ -1,0 +1,418 @@
+#!/usr/bin/bash
+# Upstream: https://github.com/klapptnot/kitsh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+NF_VERSION="3.5.1"
+declare -gA NF_URLS=()
+declare -ga NF_NAMES=()
+declare -ga NF_INSTALLED_FONTS=()
+
+declare -gra messages=(
+  'sowwy i ate your ram :b'
+  'i am become death, destroyer of ram'
+  'got your code! COPIUM'
+  "where's my white monster?"
+  'Compiling Chromium... 冗談だよ～もう諦めたよ'
+  '404: hope not found'
+  'skill issue (real)'
+  'みんなみくみくにしてあげる'
+  'have you tried turning it off and on again?'
+  'my energy drink—! 😩😩😩'
+  'june happened here'
+  'ṷw̫ṷ~ (UwU)… uwu'
+  'your daily word quota reached its limit!'
+  'n-no thoughts, head empty'
+  'white monster expired in june'
+  'bfs missing: no air left'
+  'just gonna stare at the wall for a bit'
+  'grass.exe is not recognized as a command'
+  'your yaml is valid but'
+  '別に、あんたのことなんか欲しかったわけじゃないんだからね…バカ！💢'
+  '💢💢💢'
+  '*bashful*'
+  "you're still using legacy code? cringe."
+  'p-p-please fix your config, senpai! >w<'
+  "i-it's not like i want this to work for you, b-baka! 💢"
+  'omg your config is a literal mess, fix it? ˶ᵔᵕᵔ˶'
+  "i-i'm not saying your code is bad, but… maybe delete it? 🥺"
+)
+declare -gri messages_len="${#messages[@]}"
+
+declare -ig __not_like_inochi_sos_whatsoever=0
+function inochi-sos {
+  __not_like_inochi_sos_whatsoever=1
+  "${@}"
+  local _ec="${?}"
+  __not_like_inochi_sos_whatsoever=0
+  return "${_ec}"
+}
+
+if [[ -t 1 ]]; then
+  readonly CLR_RED='\x1b[31m'
+  readonly CLR_YEL='\x1b[33m'
+  readonly CLR_GRN='\x1b[32m'
+  readonly CLR_RST='\x1b[0m'
+else
+  readonly CLR_RED='ERROR: '
+  readonly CLR_YEL='WARNING: '
+  readonly CLR_GRN=''
+  readonly CLR_RST=''
+fi
+
+function become-suicidal-ahh {
+  local idx="$((RANDOM % messages_len))"
+  warn "${messages[idx]}"
+}
+
+function die {
+  printf "${CLR_RED}%s${CLR_RST}\n" "${@}" >&2
+  exec false
+}
+
+function warn {
+  printf "${CLR_YEL}%s${CLR_RST}\n" "${@}" >&2
+}
+
+function log {
+  printf "${CLR_GRN}%s${CLR_RST}\n" "${@}"
+}
+
+trap 'become-suicidal-ahh' ERR
+set -E
+
+function get_target_dir {
+  local global_flag="${1}"
+  if [[ "${global_flag}" == 'true' ]]; then
+    printf '/usr/local/share/fonts/nerd-fonts'
+  else
+    printf '%s/.local/share/fonts/nerd-fonts' "${HOME}"
+  fi
+}
+
+function state_file_path {
+  local target_dir="${1}"
+  printf '%s/.nfmng_state' "${target_dir}"
+}
+
+function load_metadata {
+  local target_dir="${1}"
+  local s_file
+  s_file="$(state_file_path "${target_dir}")"
+
+  if [[ -f "${s_file}" ]]; then
+    source "${s_file}"
+  else
+    fetch_github_metadata "${target_dir}"
+  fi
+}
+
+function save_metadata {
+  local target_dir="${1}"
+  local s_file
+  s_file="$(state_file_path "${target_dir}")"
+
+  if [[ ! -d "${target_dir}" ]]; then
+    mkdir -p "${target_dir}" || die "Could not create directory: %s" "${target_dir}"
+  fi
+
+  {
+    printf '%s\n' "${NF_VERSION@A}" "${NF_NAMES[*]@A}" "${NF_URLS[*]@A}" "${NF_INSTALLED_FONTS[*]@A}" \
+      | sed -E 's/declare -([Aa])/declare -g\1/g'
+  } > "${s_file}"
+}
+
+function fetch_github_metadata {
+  local target_dir="${1}"
+  log "Fetching latest Nerd Fonts release metadata from GitHub..."
+
+  local api_url='https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest'
+  local json_response
+  json_response="$(inochi-sos curl -sSL "${api_url}")"
+
+  [[ -z "${json_response}" ]] && die "Failed to fetch release data from GitHub API."
+
+  local latest_tag
+  latest_tag="$(printf '%s' "${json_response}" | grep -o '"tag_name": *"[^"]*"' | head -n 1 | cut -d'"' -f4)"
+  [[ -n "${latest_tag}" ]] && NF_VERSION="${latest_tag}"
+
+  NF_URLS=()
+  NF_NAMES=()
+
+  while IFS= read -r line; do
+    if [[ "${line}" =~ browser_download_url.*releases/download/.*/(.*\.zip) ]]; then
+      local filename="${BASH_REMATCH[1]}"
+      local url
+      url="$(printf '%s' "${line}" | cut -d'"' -f4)"
+      local clean_name="${filename%.zip}"
+      clean_name="${clean_name,,}"
+
+      NF_URLS["${clean_name}"]="${url}"
+      NF_NAMES+=("${clean_name}")
+    fi
+  done < <(printf '%s' "${json_response}" | grep -E 'browser_download_url.*\.zip"')
+
+  ((${#NF_NAMES[@]} == 0)) && die "No font download assets found in GitHub release."
+
+  save_metadata "${target_dir}"
+}
+
+function update_font_cache {
+  local global_flag="${1}"
+  log "Updating system font cache..."
+  if [[ "${global_flag}" == 'true' ]]; then
+    sudo fc-cache -f -v
+  else
+    fc-cache -f -v
+  fi
+  log "Font cache updated successfully!"
+}
+
+function fuzzy_search {
+  local q="${1,,}" line l rest c pos start i
+  while IFS= read -r line; do
+    l="${line,,}" pos=0 start=-1
+    for ((i = 0; i < ${#q}; i++)); do
+      c="${q:i:1}"
+      rest="${l:pos}"
+      [[ "${rest}" == *"${c}"* ]] || continue 2
+      rest="${rest%%"${c}"*}"
+      ((start < 0)) && start="$((pos + ${#rest}))"
+      pos="$((pos + ${#rest} + 1))"
+    done
+    printf '%d\t%s\n' "$((pos - start))" "${line}"
+  done | sort -n | cut -f2-
+}
+
+function show_help {
+  local help=(
+    '\x1b[38;5;12mnfmng\x1b[0m - Nerd Fonts Manager powered by tared\n'
+    '\x1b[38;5;12mUsage\x1b[0m:'
+    '  nfmng install [--global] [--search] <name|url>'
+    '  nfmng update  [--global] [name]'
+    '  nfmng remove  [--global] <name>'
+    '  nfmng search  <name>'
+    '  nfmng list    [--global]\n'
+    '\x1b[38;5;12mFlags\x1b[0m:'
+    '  --global      Perform operation in global system directory (/usr/local/share/fonts)'
+    '  --search      Fuzzily search and pick a font from the list during install'
+  )
+  printf '%b\n' "${help[@]}"
+  exit 0
+}
+
+function cmd_search {
+  local query="${1}"
+  [[ -z "${query}" ]] && die "Please provide a search term."
+
+  local target_dir
+  target_dir="$(get_target_dir 'false')"
+  load_metadata "${target_dir}"
+
+  log "Searching fonts matching \"${query}\":"
+  local matches
+  mapfile -t matches < <(printf '%s\n' "${NF_NAMES[@]}" | fuzzy_search "${query}")
+
+  printf -- '- %s\n' "${matches[@]}"
+  printf 'Found %d matching font(s).\n' "${#matches[@]}"
+}
+
+function cmd_list {
+  local global_flag='false'
+  while ((${#} > 0)); do
+    case "${1}" in
+      '--global') global_flag='true' ;;
+    esac
+    shift 1
+  done
+
+  local target_dir
+  target_dir="$(get_target_dir "${global_flag}")"
+  load_metadata "${target_dir}"
+
+  [[ -d "${target_dir}" ]] || {
+    printf 'No installed fonts found in %s\n' "${target_dir}"
+    return 0
+  }
+
+  log "Installed Nerd Fonts in ${target_dir}:"
+  local count=0
+  for font in "${NF_INSTALLED_FONTS[@]}"; do
+    printf '  - %s\n' "${font}"
+    count="$((count+1))"
+  done
+  printf 'Total installed: %d\n' "${count}"
+}
+
+function cmd_install {
+  local global_flag='false'
+  local use_search='false'
+  local query=""
+
+  while ((${#} > 0)); do
+    case "${1}" in
+      '--global') global_flag='true' ;;
+      '--search') use_search='true' ;;
+      *) query="${1}" ;;
+    esac
+    shift 1
+  done
+
+  [[ -z "${query}" ]] && die "Missing font name or URL to install."
+
+  local target_dir
+  target_dir="$(get_target_dir "${global_flag}")"
+  load_metadata "${target_dir}"
+
+  local download_url=""
+  local font_key=""
+
+  if [[ "${query}" =~ ^https?:// ]]; then
+    download_url="${query}"
+    font_key="$(basename "${query}" .zip)"
+    font_key="${font_key,,}"
+  else
+    local search_term="${query,,}"
+    if [[ "${use_search}" == 'true' ]]; then
+      local matches=()
+      mapfile -t matches < <(printf '%s\n' "${NF_NAMES[@]}" | fuzzy_search "${query}")
+
+      ((${#matches[@]} == 0)) && die "No fonts found matching query: %s" "${query}"
+      ((${#matches[@]} == 1)) && font_key="${matches[0]}"
+
+      if [[ -z "${font_key}" ]]; then
+        printf 'Multiple matches found:\n'
+        for i in "${!matches[@]}"; do
+          printf '  [%d] %s\n' "${i}" "${matches[i]}"
+        done
+        printf 'Select index: '
+        read -r idx
+        font_key="${matches[idx]}"
+      fi
+    else
+      font_key="${search_term}"
+    fi
+
+    if [[ -n "${font_key}" ]]; then
+      download_url="${NF_URLS[${font_key}]}"
+    fi
+  fi
+
+  [[ -z "${download_url}" ]] && die "Could not resolve download URL for font: %s" "${query}"
+
+  local tmp_zip
+  tmp_zip="$(mktemp --suffix=.zip)"
+  log "Downloading font archive..."
+  inochi-sos curl -sSL "${download_url}" -o "${tmp_zip}" || die "Failed to download font archive."
+
+  local font_target_dir="${target_dir}/${font_key}"
+  if [[ "${global_flag}" == 'true' && ! -w "${target_dir}" ]]; then
+    sudo mkdir -p "${font_target_dir}"
+  else
+    mkdir -p "${font_target_dir}"
+  fi
+
+  log "Extracting font to ${font_target_dir} using tared..."
+
+  local tared
+  tared="$(command -v tared)" || die 'tared not found: skill issue (real)'
+
+  if [[ "${global_flag}" == 'true' ]]; then
+    sudo "${tared}" extract "${tmp_zip}" "${font_target_dir}"
+  else
+    "${tared}" extract "${tmp_zip}" "${font_target_dir}"
+  fi
+
+  rm -f "${tmp_zip}"
+
+  local already_registered='false'
+  for f in "${NF_INSTALLED_FONTS[@]}"; do
+    if [[ "${f}" == "${font_key}" ]]; then
+      already_registered='true'
+      break
+    fi
+  done
+  if [[ "${already_registered}" == 'false' ]]; then
+    NF_INSTALLED_FONTS+=("${font_key}")
+  fi
+
+  save_metadata "${target_dir}"
+  update_font_cache "${global_flag}"
+  log "Font installed successfully!"
+}
+
+function cmd_remove {
+  local global_flag='false'
+  local font_name=""
+
+  while ((${#} > 0)); do
+    case "${1}" in
+      '--global') global_flag='true' ;;
+      *) font_name="${1}" ;;
+    esac
+    shift 1
+  done
+
+  [[ -z "${font_name}" ]] && die "Please specify a font name to remove."
+
+  local target_dir
+  target_dir="$(get_target_dir "${global_flag}")"
+  load_metadata "${target_dir}"
+
+  local font_path="${target_dir}/${font_name}"
+  if [[ -d "${font_path}" ]]; then
+    printf 'Removing font directory: %s\n' "${font_path}"
+    if [[ "${global_flag}" == 'true' ]]; then
+      sudo rm -rf "${font_path}"
+    else
+      rm -rf "${font_path}"
+    fi
+
+    local new_installed=()
+    for f in "${NF_INSTALLED_FONTS[@]}"; do
+      if [[ "${f}" != "${font_name}" ]]; then
+        new_installed+=("${f}")
+      fi
+    done
+    NF_INSTALLED_FONTS=("${new_installed[@]}")
+
+    save_metadata "${target_dir}"
+    update_font_cache "${global_flag}"
+    log "Font removed successfully!"
+  else
+    die "Font folder '%s' not found in %s" "${font_name}" "${target_dir}"
+  fi
+}
+
+function cmd_update {
+  local global_flag='false'
+  while ((${#} > 0)); do
+    case "${1}" in
+      '--global') global_flag='true' ;;
+    esac
+    shift 1
+  done
+
+  local target_dir
+  target_dir="$(get_target_dir "${global_flag}")"
+
+  log "Refreshing metadata cache from GitHub..."
+  fetch_github_metadata "${target_dir}"
+  log "Metadata cache successfully updated to version ${NF_VERSION}!"
+}
+
+function main {
+  local action="${1}"
+  shift 1
+
+  case "${action}" in
+    'install') cmd_install "${@}" ;;
+    'remove') cmd_remove "${@}" ;;
+    'update') cmd_update "${@}" ;;
+    'search') cmd_search "${@}" ;;
+    'list' | 'list-installed') cmd_list "${@}" ;;
+    'h' | 'help' | '--help' | '') show_help ;;
+    *) die 'Unknown command "%s", try `nfmng help`' "${action}" ;;
+  esac
+}
+
+main "${@}"
