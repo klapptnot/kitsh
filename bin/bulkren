@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/data/data/com.termux/files/usr/glibc/bin/bash
 # Upstream: https://github.com/klapptnot/kitsh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -87,7 +87,8 @@ BARG
     [ ${#FILES[@]} -eq 0 ] && return
   fi
 
-  local format_img='\{\{img:([^\ ]+)\}\}'
+  local format_rand='\{rand:([^:]+):([^}]+)\}'
+  local format_img='\{img:([^\ ]+)\}'
 
   # shellcheck disable=SC2155
   for ((iter = 0; iter < "${#FILES[@]}"; iter++)); do
@@ -110,9 +111,9 @@ BARG
     local ext="${file_name##*.}"
     local name="${FORMAT}"
 
-    while [[ "${name}" == *'{rand}'* ]]; do
-      read -r rand_str < <(rsum)
-      name="${name/\{rand\}/${rand_str}}"
+    while [[ "${name}" =~ ${format_rand} ]]; do
+      read -r rand_str < <(rsum --length "${BASH_REMATCH[1]}" --chars "${BASH_REMATCH[2]}")
+      name="${name//"${BASH_REMATCH[0]}"/"${rand_str}"}"
     done
 
     name="${name//\{prefix\}/${prefix}}"

@@ -23,11 +23,11 @@ function main {
   case "${cmd}" in
     get)
       if [[ -z "${pkg}" ]]; then
-        sys-sh dumpsys deviceidle whitelist
+        sys-sh /system/bin/dumpsys deviceidle whitelist
         return 0
       fi
 
-      if sys-sh dumpsys deviceidle whitelist | grep -q "${pkg}"; then
+      if sys-sh /system/bin/dumpsys deviceidle whitelist | grep -q "${pkg}"; then
         echo "whitelisted=true"
       else
         echo "whitelisted=false"

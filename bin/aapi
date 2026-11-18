@@ -19,19 +19,24 @@ function help {
   printf 'Any other string will be treated as a function name\n'
 }
 
-function nucomp_get {
+function completion_get {
   local pref="${1%\ *}"
   mapfile -t apis < <(ls /data/data/com.termux/files/usr/bin/termux-"${pref}"* 2> /dev/null)
   mapfile -t extras < <(ls /data/data/com.termux/files/home/.termux/bin/"${pref}"* 2> /dev/null)
 
   if ((${#apis[@]} + ${#extras[@]} == 0)); then
-    printf '[]'
+    ${IS_NUCOMP} && printf '[]'
     return
   fi
 
-  printf '%s\n' "${extras[@]}" "${apis[@]}" \
-    | sed 's#^/data/data/com.termux/files/usr/bin/termux-\(.*\)$#\1\t\0#g;'"s#^/data/data/com.termux/files/home/.termux/bin/\(.*\)\$#\1\tshell script at ~/.termux/bin#" \
-    | nucompletion-adapter
+  if ${IS_NUCOMP}; then
+    printf '%s\n' "${extras[@]}" "${apis[@]}" \
+      | sed 's#^/data/data/com.termux/files/usr/bin/termux-\(.*\)$#\1\t\0#g;'"s#^/data/data/com.termux/files/home/.termux/bin/\(.*\)\$#\1\tshell script at ~/.termux/bin#" \
+      | nucompletion-adapter
+  else
+    printf '%s\n' "${extras[@]}" "${apis[@]}" \
+      | sed 's#^/data/data/com.termux/files/usr/bin/termux-\(.*\)$#\1\t0\t\0#g;'"s#^/data/data/com.termux/files/home/.termux/bin/\(.*\)\$#\1\t0\tshell script at ~/.termux/bin#"
+  fi
 }
 
 function list_apis {
@@ -66,7 +71,13 @@ case ${1} in
     exit 0
     ;;
   @nucomp)
-    nucomp_get "${@:3}"
+    IS_NUCOMP=true
+    completion_get "${@:3}"
+    exit 0
+    ;;
+  @tsvcomp)
+    IS_NUCOMP=false
+    completion_get "${@:3}"
     exit 0
     ;;
   --expand)

@@ -26,11 +26,19 @@ function rsum {
   while [ "${#}" -gt 0 ]; do
     case "${1}" in
       -l | -l* | --length)
-        if [[ "${1}" == '--length' ]]; then
+        if [[ -n "${1#-l}" && "${1#-l}" != "${1:-$'\n'}" ]]; then
+          length=${1#-l}
+        else
           length=${2}
           shift 1
-        elif [ -n "${1#-l}" ]; then
-          length=${1#-l}
+        fi
+        ;;
+      -t | -t* | --times)
+        if [[ -n "${1#-t}" && "${1#-t}" != "${1:-$'\n'}" ]]; then
+          times=${1#-t}
+        else
+          times=${2}
+          shift 1
         fi
         ;;
       -c | --chars)
@@ -43,14 +51,6 @@ function rsum {
         if [ -n "${2}" ]; then
           sep=${2}
           shift 1
-        fi
-        ;;
-      -t | -t* | --times)
-        if [[ "${1}" == '--times' ]]; then
-          times=${2}
-          shift 1
-        elif [ -n "${1#-t}" ]; then
-          times=${1#-t}
         fi
         ;;
       -b | --break)

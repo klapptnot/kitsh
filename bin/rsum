@@ -8,30 +8,27 @@ function main {
   if [[ "${1}" =~ ^-h$|^--help$|^help$ ]]; then
     local -a lns=()
     if [ "${linkname}" != 'rsumc' ]; then
-      lns+=("\x1b[38;5;12mrsum\x1b[0m: Get/generate (random) strings.\n\n")
+      lns+=('\x1b[38;5;12mrsum\x1b[0m: Get/generate (random) strings.\n')
     else
-      lns+=("\x1b[38;5;12mrsumc\x1b[0m: Get/generate (random) strings (and copy to clipboard).\n\n")
+      lns+=('\x1b[38;5;12mrsumc\x1b[0m: Get/generate (random) strings (and copy to clipboard).\n')
     fi
 
     lns+=(
-      "\x1b[38;5;12mUsage\x1b[0m:\n"
-      '  \x1b[38;5;14mrsum\x1b[0m [OPTIONS]\n'
-      '  \x1b[38;5;14mrsum\x1b[0m help\n\n'
-      "\x1b[38;5;12mOptions\x1b[0m:\n"
-      '  -l, --length \x1b[38;5;15m<int>\x1b[0m  The length of each random portion (def: 16)\n'
-      '  -c, --chars \x1b[38;5;15m<str>\x1b[0m   Allowed to use characters (def: a-zA-Z0-9)\n'
-      '  -s, --sep \x1b[38;5;15m<str>\x1b[0m     Chained string separator (def: "")\n'
-      '  -t, --times \x1b[38;5;15m<int>\x1b[0m   Chained strings count (def: 1)\n'
-      '  -n, --break         Add a trailing linefeed (def: off)\n\n'
-      "\x1b[38;5;12mExample\x1b[0m:\n"
-      "   - rsum -l 16 -c '0-9' -s '-' -t 5 -n\n"
-      "  Return: A string of 5 '16 number' strings separated by \"-\" and trailing linebreak\n"
-      "  Default: 16 length alphanumeric string without trailing linebreak"
+      "\x1b[38;5;12mUsage\x1b[0m:"
+      '  \x1b[38;5;14mrsum\x1b[0m [OPTIONS]'
+      '  \x1b[38;5;14mrsum\x1b[0m help\n'
+      "\x1b[38;5;12mOptions\x1b[0m:"
+      '  -l, --length \x1b[38;5;15m<int>\x1b[0m  The length of each random portion (def: 16)'
+      '  -c, --chars  \x1b[38;5;15m<str>\x1b[0m  Allowed to use characters (def: a-zA-Z0-9)'
+      '  -s, --sep    \x1b[38;5;15m<str>\x1b[0m  Chained string separator (def: "")'
+      '  -t, --times  \x1b[38;5;15m<int>\x1b[0m  Chained strings count (def: 1)'
+      '  -n, --break         Add a trailing linefeed (def: off)\n'
+      "\x1b[38;5;12mExample\x1b[0m:"
+      "  # 5 sections of 16 numbers separated by dashes, with trailing linebreak"
+      "  $ rsum -l 16 -c '0-9' -s '-' -t 5 -n"
     )
-    IFS= tlns="${lns[*]}"
-    # shellcheck disable=SC2059
-    printf "${tlns}"
-    exit
+    printf '%b\n' "${lns[@]}"
+    exit 0
   fi
 
   source rsum.sh
@@ -51,8 +48,8 @@ function main {
   elif command -v pbcopy > /dev/null 2>&1; then
     rsum "${@}" | tee >(pbcopy) # macOS
   else
-    echo "No clipboard utility found (wl-copy, xclip, xsel, pbcopy)" >&2
-    echo "Output:" >&2
+    printf 'No clipboard utility found (wl-copy, xclip, xsel, pbcopy)\n' >&2
+    printf 'Output:\n' >&2
     rsum "${@}"
     return 1
   fi

@@ -369,7 +369,7 @@ function yaml::load {
       fi
 
       __0type="${__yaml_typereg[${__val}]}"
-      ((__0type != YAML_MAP])) \
+      ((__0type != YAML_MAP)) \
         && __yaml_die "${curr_indent}" 'YamlError' '<< merging can only be anchored to a map'
 
       local -n __an="${__val}"
@@ -410,7 +410,7 @@ function yaml::load {
       while true; do
         read -r -d ':' key_p <<< "${line_pa}" || break
         key_pa+="${key_p}:"
-        line_pa="${line_pa#"${key_pa}"}"
+        line_pa="${line#"${key_pa}"}"
         if [[ "${line_pa}" == ' '* || -z "${line_pa}" ]]; then
           key="${key_pa%:}"
           line="${line_pa#"${line_pa%%[! ]*}"}"
