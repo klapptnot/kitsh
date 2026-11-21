@@ -230,6 +230,7 @@ function yaml::dump (
 
 # !! <varname:string> <file_path:string>
 function yaml::load {
+  local DUPLICATE_HANDLING="${DUPLICATE_HANDLING:-error}"
   local _root_name="${1:?root node name required}"
   [[ "${_root_name}" != '__yn'* ]] && yaml::die 'NameError' 'Name ref for root has to start with "__yn", got "'"${_root_name}"'"'
   local -
@@ -315,19 +316,23 @@ function yaml::load {
   function __yaml_push_node {
     ((level++))
     local -n __node_ref="${node_stack[-1]}"
-    local __new_node="${_root_name}_$((++__yaml_node_idx))"
 
-    case "${1}" in
-      $YAML_MAP) declare -Ag "${__new_node}=()" ;;
-      $YAML_LIST) declare -ag "${__new_node}=()" ;;
-    esac
-    __yaml_typereg["${__new_node}"]="${1}"
+    if [[ -z "${__node_ref["${waits_value:?}"]}" ]]; then
+      local __new_node="${_root_name}_$((++__yaml_node_idx))"
+      case "${1}" in
+        $YAML_MAP) declare -Ag "${__new_node}=()" ;;
+        $YAML_LIST) declare -ag "${__new_node}=()" ;;
+      esac
+      __yaml_typereg["${__new_node}"]="${1}"
 
-    local __0type="${__yaml_typereg[${node_stack[-1]}]}"
-    if ((__0type == YAML_MAP)); then
-      __node_ref["${waits_value:?}"]="${__new_node}"
+      local __0type="${__yaml_typereg[${node_stack[-1]}]}"
+      if ((__0type == YAML_MAP)); then
+        __node_ref["${waits_value:?}"]="${__new_node}"
+      else
+        __node_ref+=("${__new_node}")
+      fi
     else
-      __node_ref+=("${__new_node}")
+      local __new_node="${__node_ref["${waits_value:?}"]}"
     fi
 
     node_stack+=("${__new_node}")
@@ -361,9 +366,16 @@ function yaml::load {
     local __0type="${__yaml_typereg[${node_stack[-1]}]}"
     if ((__0type == YAML_MAP)); then
       local __key
-
       read -r __key <<< "${2:?missing key}"
-      if [[ "${__key:?a cannot be just spaces}" != '<<' ]]; then
+
+      if [[ -v "__node_ref["${__key:?a cannot be just spaces}"]" ]]; then
+        case "${DUPLICATE_HANDLING}" in
+          error) __yaml_die "${curr_indent}" 'YamlError' 'key is already defined' ;;
+          first) return ;;
+        esac
+      fi
+
+      if [[ "${__key}" != '<<' ]]; then
         __node_ref["${__key}"]="${__val}"
         return
       fi
